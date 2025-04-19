@@ -1,0 +1,15 @@
+services:
+  Rust-Mock:
+    image: ghcr.io/arthurkowalsky/rust-mock:latest
+    ports:
+      - "8090:8090"
+    #volumes:
+    # Uncomment the line below to use an OpenAPI spec file
+    # - ./openapi.json:/app/openapi.json
+    environment:
+      # Uncomment the line below to enable OpenAPI spec file
+      # - OPENAPI_FILE=/app/openapi.json
+      # Default host and port settings
+      - HOST=0.0.0.0
+      - PORT=8090
+    restart: unless-stopped

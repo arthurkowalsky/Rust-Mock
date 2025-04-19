@@ -1,0 +1,54 @@
+### Global variables
+@baseUrl = http://localhost:8090
+@contentType = application/json
+
+### Mock configuration management
+GET {{baseUrl}}/__mock/config
+Content-Type: {{contentType}}
+Accept: {{contentType}}
+
+### Logs management
+GET {{baseUrl}}/__mock/logs
+Content-Type: {{contentType}}
+Accept: {{contentType}}
+
+### Clear logs
+DELETE {{baseUrl}}/__mock/logs
+Content-Type: {{contentType}}
+Accept: {{contentType}}
+
+### Add new endpoint
+POST {{baseUrl}}/__mock/endpoints
+Content-Type: {{contentType}}
+Accept: {{contentType}}
+
+{
+  "method": "POST",
+  "path": "/example-endpoint",
+  "response": {
+    "message": "Example response"
+  },
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json"
+  }
+}
+
+### Remove endpoint
+DELETE {{baseUrl}}/__mock/endpoints
+Content-Type: {{contentType}}
+Accept: {{contentType}}
+
+{
+  "method": "POST",
+  "path": "/example-endpoint"
+}
+
+### Example dynamic endpoint
+POST {{baseUrl}}/example-endpoint
+Content-Type: {{contentType}}
+Accept: {{contentType}}
+
+{
+  "key": "value"
+}

@@ -1,0 +1,16 @@
+.idea
+.fleet
+*.iml
+.gradle
+out/
+bin/
+build/
+gen/
+deps/
+exampleProject
+testData
+.DS_Store
+/pretty_printers_tests/target
+/native-helper/target
+/attributes-info/target
+/target
