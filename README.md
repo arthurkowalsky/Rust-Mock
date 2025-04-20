@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/arthurkowalsky/Rust-Mock/actions"><img src="https://img.shields.io/github/workflow/status/arthurkowalsky/Rust-Mock/Build" alt="Build Status"></a>
+  <a href="https://github.com/arthurkowalsky/Rust-Mock/actions"><img src="https://img.shields.io/github/actions/workflow/status/arthurkowalsky/Rust-Mock/ci.yml" alt="Build Status"></a>
   <a href="https://github.com/arthurkowalsky/Rust-Mock/releases"><img src="https://img.shields.io/github/v/release/arthurkowalsky/Rust-Mock" alt="Version"></a>
   <a href="https://github.com/arthurkowalsky/Rust-Mock/blob/main/LICENSE"><img src="https://img.shields.io/github/license/arthurkowalsky/Rust-Mock" alt="License"></a>
   <a href="https://github.com/arthurkowalsky/Rust-Mock/pkgs/container/rust-mock"><img src="https://img.shields.io/badge/ghcr.io-package-blue" alt="GitHub Package"></a>
