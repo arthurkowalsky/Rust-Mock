@@ -1,8 +1,8 @@
 use reqwest;
 use serde_json::json;
 use std::process::{Child, Command, Stdio};
-use std::thread;
 use std::time::Duration;
+use tokio::time::sleep;
 
 const TEST_PORT: u16 = 18090;
 const BASE_URL: &str = "http://127.0.0.1:18090";
@@ -12,7 +12,7 @@ struct TestServer {
 }
 
 impl TestServer {
-    fn start() -> Self {
+    async fn start() -> Self {
         // Build the application first
         let build_status = Command::new("cargo")
             .args(&["build", "--release"])
@@ -31,13 +31,19 @@ impl TestServer {
             .spawn()
             .expect("Failed to start server");
 
-        // Wait for server to start
+        let client = reqwest::Client::new();
+
+        // Wait for server to start using async
         for _ in 0..50 {
-            if reqwest::blocking::get(format!("{}/__mock/config", BASE_URL)).is_ok() {
+            if client.get(format!("{}/__mock/config", BASE_URL))
+                .send()
+                .await
+                .is_ok()
+            {
                 println!("Server started successfully on port {}", TEST_PORT);
                 return TestServer { process };
             }
-            thread::sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(100)).await;
         }
 
         panic!("Server failed to start within timeout");
@@ -54,7 +60,7 @@ impl Drop for TestServer {
 
 #[tokio::test]
 async fn test_server_starts() {
-    let _server = TestServer::start();
+    let _server = TestServer::start().await;
 
     let client = reqwest::Client::new();
     let response = client
@@ -68,7 +74,7 @@ async fn test_server_starts() {
 
 #[tokio::test]
 async fn test_add_endpoint_integration() {
-    let _server = TestServer::start();
+    let _server = TestServer::start().await;
     let client = reqwest::Client::new();
 
     // Clear any existing endpoints by getting config first
@@ -112,7 +118,7 @@ async fn test_add_endpoint_integration() {
 
 #[tokio::test]
 async fn test_call_dynamic_endpoint() {
-    let _server = TestServer::start();
+    let _server = TestServer::start().await;
     let client = reqwest::Client::new();
 
     // Add a dynamic endpoint
@@ -147,7 +153,7 @@ async fn test_call_dynamic_endpoint() {
 
 #[tokio::test]
 async fn test_remove_endpoint_integration() {
-    let _server = TestServer::start();
+    let _server = TestServer::start().await;
     let client = reqwest::Client::new();
 
     // Add an endpoint
@@ -185,7 +191,7 @@ async fn test_remove_endpoint_integration() {
 
 #[tokio::test]
 async fn test_logs_integration() {
-    let _server = TestServer::start();
+    let _server = TestServer::start().await;
     let client = reqwest::Client::new();
 
     // Clear logs first
@@ -238,7 +244,7 @@ async fn test_logs_integration() {
 
 #[tokio::test]
 async fn test_clear_logs_integration() {
-    let _server = TestServer::start();
+    let _server = TestServer::start().await;
     let client = reqwest::Client::new();
 
     // Make some requests to generate logs
@@ -271,7 +277,7 @@ async fn test_clear_logs_integration() {
 
 #[tokio::test]
 async fn test_not_found_integration() {
-    let _server = TestServer::start();
+    let _server = TestServer::start().await;
     let client = reqwest::Client::new();
 
     let response = client
@@ -285,7 +291,7 @@ async fn test_not_found_integration() {
 
 #[tokio::test]
 async fn test_multiple_endpoints_integration() {
-    let _server = TestServer::start();
+    let _server = TestServer::start().await;
     let client = reqwest::Client::new();
 
     // Add multiple endpoints

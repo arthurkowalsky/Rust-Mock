@@ -11,14 +11,14 @@ use serde_json::{json, Value};
 use std::{collections::{HashMap, HashSet}, env, fs, sync::Mutex};
 
 #[derive(Serialize, Clone)]
-struct RequestLog {
-    method: String,
-    path: String,
-    headers: HashMap<String, String>,
-    query: String,
-    body: Option<Value>,
-    timestamp: String,
-    status: u16,
+pub struct RequestLog {
+    pub method: String,
+    pub path: String,
+    pub headers: HashMap<String, String>,
+    pub query: String,
+    pub body: Option<Value>,
+    pub timestamp: String,
+    pub status: u16,
 }
 
 #[derive(Clone)]
@@ -45,18 +45,18 @@ struct Config {
 }
 
 #[derive(Deserialize)]
-struct EndpointConfig {
-    method: String,
-    path: String,
-    response: Value,
-    status: Option<u16>,
-    headers: Option<HashMap<String, String>>,
+pub struct EndpointConfig {
+    pub method: String,
+    pub path: String,
+    pub response: Value,
+    pub status: Option<u16>,
+    pub headers: Option<HashMap<String, String>>,
 }
 
 #[derive(Deserialize)]
-struct RemoveConfig {
-    method: String,
-    path: String,
+pub struct RemoveConfig {
+    pub method: String,
+    pub path: String,
 }
 
 fn get_operation(spec: &OpenAPI, method: &str, req_path: &str) -> Option<Operation> {
