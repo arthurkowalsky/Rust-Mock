@@ -51,8 +51,11 @@ jobs:
       - name: Build Rust
         run: cargo build --release
 
-      - name: Run API Tests
+      - name: Run Unit Tests
         run: cargo test --test api_tests --verbose
+
+      - name: Run Integration Tests
+        run: cargo test --test integration_tests --verbose -- --test-threads=1
 
   docker:
     needs: build
