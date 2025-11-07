@@ -22,18 +22,18 @@ struct RequestLog {
 }
 
 #[derive(Clone)]
-struct DynamicEndpoint {
-    response: Value,
-    status: u16,
-    headers: Option<HashMap<String, String>>,
+pub struct DynamicEndpoint {
+    pub response: Value,
+    pub status: u16,
+    pub headers: Option<HashMap<String, String>>,
 }
 
-struct AppState {
-    dynamic: Mutex<HashMap<(String, String), DynamicEndpoint>>,
-    removed_spec: Mutex<HashSet<(String, String)>>,
-    spec: Option<OpenAPI>,
-    raw_spec: Option<Value>,
-    logs: Mutex<Vec<RequestLog>>,
+pub struct AppState {
+    pub dynamic: Mutex<HashMap<(String, String), DynamicEndpoint>>,
+    pub removed_spec: Mutex<HashSet<(String, String)>>,
+    pub spec: Option<OpenAPI>,
+    pub raw_spec: Option<Value>,
+    pub logs: Mutex<Vec<RequestLog>>,
 }
 
 #[derive(Parser)]
@@ -100,7 +100,7 @@ fn extract_example_response(op: &Operation) -> Option<Value> {
     None
 }
 
-async fn add_endpoint(data: web::Data<AppState>, cfg: web::Json<EndpointConfig>) -> impl Responder {
+pub async fn add_endpoint(data: web::Data<AppState>, cfg: web::Json<EndpointConfig>) -> impl Responder {
     let status = cfg.status.unwrap_or(200);
     let ep = DynamicEndpoint { response: cfg.response.clone(), status, headers: cfg.headers.clone() };
     data.dynamic.lock().unwrap().insert((cfg.method.clone(), cfg.path.clone()), ep);
@@ -108,7 +108,7 @@ async fn add_endpoint(data: web::Data<AppState>, cfg: web::Json<EndpointConfig>)
     HttpResponse::Ok().json(json!({"added": true}))
 }
 
-async fn remove_endpoint(data: web::Data<AppState>, cfg: web::Json<RemoveConfig>) -> impl Responder {
+pub async fn remove_endpoint(data: web::Data<AppState>, cfg: web::Json<RemoveConfig>) -> impl Responder {
     let mut dyn_map = data.dynamic.lock().unwrap();
     let mut rem_spec = data.removed_spec.lock().unwrap();
     let key = (cfg.method.clone(), cfg.path.clone());
@@ -121,7 +121,7 @@ async fn remove_endpoint(data: web::Data<AppState>, cfg: web::Json<RemoveConfig>
     HttpResponse::Ok().json(json!({"removed": removed}))
 }
 
-async fn get_config(data: web::Data<AppState>) -> impl Responder {
+pub async fn get_config(data: web::Data<AppState>) -> impl Responder {
     let mut list = Vec::new();
     if let Some(spec) = &data.spec {
         let rem = data.removed_spec.lock().unwrap();
@@ -148,17 +148,17 @@ async fn get_config(data: web::Data<AppState>) -> impl Responder {
     HttpResponse::Ok().json(list)
 }
 
-async fn get_logs(data: web::Data<AppState>) -> impl Responder {
+pub async fn get_logs(data: web::Data<AppState>) -> impl Responder {
     let logs = data.logs.lock().unwrap();
     HttpResponse::Ok().json(&*logs)
 }
 
-async fn clear_logs(data: web::Data<AppState>) -> impl Responder {
+pub async fn clear_logs(data: web::Data<AppState>) -> impl Responder {
     data.logs.lock().unwrap().clear();
     HttpResponse::Ok().json(json!({"cleared": true}))
 }
 
-async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppState>) -> impl Responder {
+pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppState>) -> impl Responder {
     let method = req.method().as_str().to_uppercase();
     let path = req.path().to_string();
     let timestamp = Local::now().to_rfc3339();

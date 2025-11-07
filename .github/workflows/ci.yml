@@ -48,6 +48,9 @@ jobs:
       - name: Build Rust
         run: cargo build --release
 
+      - name: Run API Tests
+        run: cargo test --test api_unit_tests --verbose
+
   docker:
     needs: build
     runs-on: ubuntu-latest
