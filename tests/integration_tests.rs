@@ -289,8 +289,8 @@ async fn test_clear_logs_integration() {
     let logs: serde_json::Value = logs_response.json().await.expect("Failed to parse logs");
     let log_entries = logs.as_array().unwrap();
 
-    // Should be empty after clearing (or only have the GET to /__mock/logs itself)
-    assert!(log_entries.len() <= 1, "Expected 0 or 1 log entries after clear, got {}", log_entries.len());
+    // Should be completely empty - admin endpoints (/__mock/*) are not logged
+    assert_eq!(log_entries.len(), 0, "Expected logs to be empty after clearing");
 }
 
 #[tokio::test]
