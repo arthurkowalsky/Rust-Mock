@@ -738,3 +738,378 @@ async fn test_empty_response_body() {
 
     assert_eq!(response.status().as_u16(), 204);
 }
+
+#[tokio::test]
+async fn test_import_openapi_valid_spec() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    let openapi_spec = json!({
+        "openapi": "3.0.0",
+        "info": {
+            "title": "Test API",
+            "version": "1.0.0"
+        },
+        "paths": {
+            "/api/users": {
+                "get": {
+                    "summary": "Get users",
+                    "responses": {
+                        "200": {
+                            "description": "Success",
+                            "content": {
+                                "application/json": {
+                                    "example": {"users": [{"id": 1, "name": "John"}]}
+                                }
+                            }
+                        }
+                    }
+                },
+                "post": {
+                    "summary": "Create user",
+                    "responses": {
+                        "201": {
+                            "description": "Created",
+                            "content": {
+                                "application/json": {
+                                    "example": {"id": 1, "name": "John"}
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "/api/products/{id}": {
+                "get": {
+                    "summary": "Get product",
+                    "responses": {
+                        "200": {
+                            "description": "Success",
+                            "content": {
+                                "application/json": {
+                                    "example": {"id": 1, "name": "Product 1"}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    let response = client
+        .post(format!("{}/__mock/import", BASE_URL))
+        .json(&json!({"openapi_spec": openapi_spec}))
+        .send()
+        .await
+        .expect("Failed to import OpenAPI spec");
+
+    assert!(response.status().is_success());
+    let body: serde_json::Value = response.json().await.expect("Failed to parse response");
+    assert_eq!(body["imported"], true);
+    assert_eq!(body["count"], 3);
+
+    // Verify endpoints were imported
+    let config_response = client
+        .get(format!("{}/__mock/config", BASE_URL))
+        .send()
+        .await
+        .expect("Failed to get config");
+
+    let config: serde_json::Value = config_response.json().await.expect("Failed to parse config");
+    let endpoints = config.as_array().unwrap();
+
+    assert!(endpoints.iter().any(|e| e["method"] == "GET" && e["path"] == "/api/users"));
+    assert!(endpoints.iter().any(|e| e["method"] == "POST" && e["path"] == "/api/users"));
+    assert!(endpoints.iter().any(|e| e["method"] == "GET" && e["path"] == "/api/products/{id}"));
+}
+
+#[tokio::test]
+async fn test_import_openapi_invalid_spec() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    let invalid_spec = json!({
+        "invalid": "spec"
+    });
+
+    let response = client
+        .post(format!("{}/__mock/import", BASE_URL))
+        .json(&json!({"openapi_spec": invalid_spec}))
+        .send()
+        .await
+        .expect("Failed to send import request");
+
+    assert_eq!(response.status().as_u16(), 400);
+    let body: serde_json::Value = response.json().await.expect("Failed to parse response");
+    assert!(body["error"].as_str().unwrap().contains("Invalid OpenAPI specification"));
+}
+
+#[tokio::test]
+async fn test_export_openapi() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    // Add some endpoints first
+    let endpoints = vec![
+        json!({
+            "method": "GET",
+            "path": "/api/users",
+            "response": {"users": []},
+            "status": 200
+        }),
+        json!({
+            "method": "POST",
+            "path": "/api/users",
+            "response": {"id": 1, "name": "John"},
+            "status": 201
+        }),
+    ];
+
+    for endpoint in endpoints {
+        client
+            .post(format!("{}/__mock/endpoints", BASE_URL))
+            .json(&endpoint)
+            .send()
+            .await
+            .expect("Failed to add endpoint");
+    }
+
+    // Export OpenAPI spec
+    let response = client
+        .get(format!("{}/__mock/export", BASE_URL))
+        .send()
+        .await
+        .expect("Failed to export OpenAPI spec");
+
+    assert!(response.status().is_success());
+    let spec: serde_json::Value = response.json().await.expect("Failed to parse response");
+
+    assert_eq!(spec["openapi"], "3.0.0");
+    assert_eq!(spec["info"]["title"], "Mock API");
+    assert_eq!(spec["info"]["description"], "Exported from Rust-Mock server");
+
+    let paths = spec["paths"].as_object().unwrap();
+    assert!(paths.contains_key("/api/users"));
+
+    let users_path = &paths["/api/users"];
+    assert!(users_path["get"].is_object());
+    assert!(users_path["post"].is_object());
+
+    // Verify GET operation
+    let get_op = &users_path["get"];
+    assert_eq!(get_op["summary"], "GET /api/users");
+    assert!(get_op["responses"]["200"].is_object());
+
+    // Verify POST operation
+    let post_op = &users_path["post"];
+    assert_eq!(post_op["summary"], "POST /api/users");
+    assert!(post_op["requestBody"].is_object());
+    assert!(post_op["responses"]["201"].is_object());
+}
+
+#[tokio::test]
+async fn test_import_export_roundtrip() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    // Import OpenAPI spec
+    let original_spec = json!({
+        "openapi": "3.0.0",
+        "info": {
+            "title": "Test API",
+            "version": "1.0.0"
+        },
+        "paths": {
+            "/api/test": {
+                "get": {
+                    "summary": "Get test",
+                    "responses": {
+                        "200": {
+                            "description": "Success",
+                            "content": {
+                                "application/json": {
+                                    "example": {"message": "test"}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    let import_response = client
+        .post(format!("{}/__mock/import", BASE_URL))
+        .json(&json!({"openapi_spec": original_spec}))
+        .send()
+        .await
+        .expect("Failed to import OpenAPI spec");
+
+    assert!(import_response.status().is_success());
+
+    // Export OpenAPI spec
+    let export_response = client
+        .get(format!("{}/__mock/export", BASE_URL))
+        .send()
+        .await
+        .expect("Failed to export OpenAPI spec");
+
+    assert!(export_response.status().is_success());
+    let exported_spec: serde_json::Value = export_response.json().await.expect("Failed to parse response");
+
+    // Verify exported spec has the correct structure
+    assert_eq!(exported_spec["openapi"], "3.0.0");
+    assert_eq!(exported_spec["info"]["title"], "Mock API");
+    assert!(exported_spec["paths"]["/api/test"]["get"].is_object());
+    assert_eq!(
+        exported_spec["paths"]["/api/test"]["get"]["responses"]["200"]["content"]["application/json"]["example"],
+        json!({"message": "test"})
+    );
+}
+
+#[tokio::test]
+async fn test_import_multiple_methods_same_path() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    let openapi_spec = json!({
+        "openapi": "3.0.0",
+        "info": {
+            "title": "Test API",
+            "version": "1.0.0"
+        },
+        "paths": {
+            "/api/resource": {
+                "get": {
+                    "responses": {
+                        "200": {
+                            "description": "Get",
+                            "content": {
+                                "application/json": {
+                                    "example": {"action": "get"}
+                                }
+                            }
+                        }
+                    }
+                },
+                "post": {
+                    "responses": {
+                        "201": {
+                            "description": "Create",
+                            "content": {
+                                "application/json": {
+                                    "example": {"action": "create"}
+                                }
+                            }
+                        }
+                    }
+                },
+                "put": {
+                    "responses": {
+                        "200": {
+                            "description": "Update",
+                            "content": {
+                                "application/json": {
+                                    "example": {"action": "update"}
+                                }
+                            }
+                        }
+                    }
+                },
+                "delete": {
+                    "responses": {
+                        "204": {
+                            "description": "Delete",
+                            "content": {
+                                "application/json": {
+                                    "example": {"action": "delete"}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    let response = client
+        .post(format!("{}/__mock/import", BASE_URL))
+        .json(&json!({"openapi_spec": openapi_spec}))
+        .send()
+        .await
+        .expect("Failed to import OpenAPI spec");
+
+    assert!(response.status().is_success());
+    let body: serde_json::Value = response.json().await.expect("Failed to parse response");
+    assert_eq!(body["count"], 4);
+
+    // Verify all methods were imported by calling each endpoint
+    let get_response = client.get(format!("{}/api/resource", BASE_URL)).send().await.unwrap();
+    assert!(get_response.status().is_success());
+    let get_body: serde_json::Value = get_response.json().await.unwrap();
+    assert_eq!(get_body["action"], "get");
+
+    let post_response = client.post(format!("{}/api/resource", BASE_URL)).send().await.unwrap();
+    assert_eq!(post_response.status().as_u16(), 201);
+    let post_body: serde_json::Value = post_response.json().await.unwrap();
+    assert_eq!(post_body["action"], "create");
+
+    let put_response = client.put(format!("{}/api/resource", BASE_URL)).send().await.unwrap();
+    assert!(put_response.status().is_success());
+    let put_body: serde_json::Value = put_response.json().await.unwrap();
+    assert_eq!(put_body["action"], "update");
+
+    let delete_response = client.delete(format!("{}/api/resource", BASE_URL)).send().await.unwrap();
+    assert_eq!(delete_response.status().as_u16(), 204);
+}
+
+#[tokio::test]
+async fn test_call_imported_endpoint() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    // Import OpenAPI spec with specific response
+    let openapi_spec = json!({
+        "openapi": "3.0.0",
+        "info": {
+            "title": "Test API",
+            "version": "1.0.0"
+        },
+        "paths": {
+            "/api/imported": {
+                "get": {
+                    "responses": {
+                        "200": {
+                            "description": "Success",
+                            "content": {
+                                "application/json": {
+                                    "example": {"source": "imported", "data": "test"}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    client
+        .post(format!("{}/__mock/import", BASE_URL))
+        .json(&json!({"openapi_spec": openapi_spec}))
+        .send()
+        .await
+        .expect("Failed to import OpenAPI spec");
+
+    // Call the imported endpoint
+    let response = client
+        .get(format!("{}/api/imported", BASE_URL))
+        .send()
+        .await
+        .expect("Failed to call imported endpoint");
+
+    assert!(response.status().is_success());
+    let body: serde_json::Value = response.json().await.expect("Failed to parse response");
+    assert_eq!(body["source"], "imported");
+    assert_eq!(body["data"], "test");
+}

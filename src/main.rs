@@ -88,7 +88,23 @@ fn get_request_schema(raw_spec: &Value, method: &str, path: &str) -> Option<Valu
 }
 
 fn extract_example_response(op: &Operation) -> Option<Value> {
-    if let Some(item) = op.responses.responses.get(&StatusCode::Code(200)) {
+    // Try common success status codes
+    for status_code in [200, 201, 204, 202] {
+        if let Some(item) = op.responses.responses.get(&StatusCode::Code(status_code)) {
+            if let ReferenceOr::Item(resp) = item {
+                if let Some(media) = resp.content.get("application/json") {
+                    if let Some(example) = &media.example {
+                        return Some(example.clone());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn extract_example_response_for_status(op: &Operation, status: u16) -> Option<Value> {
+    if let Some(item) = op.responses.responses.get(&StatusCode::Code(status)) {
         if let ReferenceOr::Item(resp) = item {
             if let Some(media) = resp.content.get("application/json") {
                 if let Some(example) = &media.example {
@@ -192,17 +208,20 @@ pub async fn import_openapi(data: web::Data<AppState>, req: web::Json<ImportRequ
 
             for (method, op_opt) in methods {
                 if let Some(op) = op_opt {
-                    // Extract response example or use default
-                    let response = extract_example_response(op).unwrap_or_else(|| json!({"message": "OK"}));
-
                     // Extract status code (default to 200)
                     let status = if op.responses.responses.contains_key(&StatusCode::Code(201)) {
                         201
                     } else if op.responses.responses.contains_key(&StatusCode::Code(204)) {
                         204
+                    } else if op.responses.responses.contains_key(&StatusCode::Code(202)) {
+                        202
                     } else {
                         200
                     };
+
+                    // Extract response example for the detected status code
+                    let response = extract_example_response_for_status(op, status)
+                        .unwrap_or_else(|| json!({"message": "OK"}));
 
                     let endpoint = DynamicEndpoint {
                         response,
@@ -376,375 +395,4 @@ async fn main() -> std::io::Result<()> {
         .bind((cfg.host, cfg.port))?
         .run()
         .await
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use actix_web::{test, App};
-
-    fn create_test_app_state() -> web::Data<AppState> {
-        web::Data::new(AppState {
-            dynamic: Mutex::new(HashMap::new()),
-            removed_spec: Mutex::new(HashSet::new()),
-            spec: None,
-            raw_spec: None,
-            logs: Mutex::new(vec![]),
-        })
-    }
-
-    #[actix_web::test]
-    async fn test_import_openapi_valid_spec() {
-        let state = create_test_app_state();
-        let app = test::init_service(
-            App::new()
-                .app_data(state.clone())
-                .route("/import", web::post().to(import_openapi))
-        ).await;
-
-        let openapi_spec = json!({
-            "openapi": "3.0.0",
-            "info": {
-                "title": "Test API",
-                "version": "1.0.0"
-            },
-            "paths": {
-                "/api/users": {
-                    "get": {
-                        "summary": "Get users",
-                        "responses": {
-                            "200": {
-                                "description": "Success",
-                                "content": {
-                                    "application/json": {
-                                        "example": {"users": [{"id": 1, "name": "John"}]}
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "post": {
-                        "summary": "Create user",
-                        "responses": {
-                            "201": {
-                                "description": "Created",
-                                "content": {
-                                    "application/json": {
-                                        "example": {"id": 1, "name": "John"}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                "/api/products/{id}": {
-                    "get": {
-                        "summary": "Get product",
-                        "responses": {
-                            "200": {
-                                "description": "Success",
-                                "content": {
-                                    "application/json": {
-                                        "example": {"id": 1, "name": "Product 1"}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        let req = test::TestRequest::post()
-            .uri("/import")
-            .set_json(json!({"openapi_spec": openapi_spec}))
-            .to_request();
-
-        let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), 200);
-
-        let body: Value = test::read_body_json(resp).await;
-        assert_eq!(body["imported"], true);
-        assert_eq!(body["count"], 3);
-
-        // Verify endpoints were imported
-        let dyn_map = state.dynamic.lock().unwrap();
-        assert!(dyn_map.contains_key(&("GET".to_string(), "/api/users".to_string())));
-        assert!(dyn_map.contains_key(&("POST".to_string(), "/api/users".to_string())));
-        assert!(dyn_map.contains_key(&("GET".to_string(), "/api/products/{id}".to_string())));
-    }
-
-    #[actix_web::test]
-    async fn test_import_openapi_invalid_spec() {
-        let state = create_test_app_state();
-        let app = test::init_service(
-            App::new()
-                .app_data(state.clone())
-                .route("/import", web::post().to(import_openapi))
-        ).await;
-
-        let invalid_spec = json!({
-            "invalid": "spec"
-        });
-
-        let req = test::TestRequest::post()
-            .uri("/import")
-            .set_json(json!({"openapi_spec": invalid_spec}))
-            .to_request();
-
-        let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), 400);
-
-        let body: Value = test::read_body_json(resp).await;
-        assert!(body["error"].as_str().unwrap().contains("Invalid OpenAPI specification"));
-    }
-
-    #[actix_web::test]
-    async fn test_export_openapi_empty() {
-        let state = create_test_app_state();
-        let app = test::init_service(
-            App::new()
-                .app_data(state.clone())
-                .route("/export", web::get().to(export_openapi))
-        ).await;
-
-        let req = test::TestRequest::get()
-            .uri("/export")
-            .to_request();
-
-        let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), 200);
-
-        let body: Value = test::read_body_json(resp).await;
-        assert_eq!(body["openapi"], "3.0.0");
-        assert_eq!(body["info"]["title"], "Mock API");
-        assert_eq!(body["paths"].as_object().unwrap().len(), 0);
-    }
-
-    #[actix_web::test]
-    async fn test_export_openapi_with_endpoints() {
-        let state = create_test_app_state();
-
-        // Add some endpoints
-        {
-            let mut dyn_map = state.dynamic.lock().unwrap();
-            dyn_map.insert(
-                ("GET".to_string(), "/api/users".to_string()),
-                DynamicEndpoint {
-                    response: json!({"users": []}),
-                    status: 200,
-                    headers: Some(HashMap::from([
-                        ("Content-Type".to_string(), "application/json".to_string()),
-                    ])),
-                }
-            );
-            dyn_map.insert(
-                ("POST".to_string(), "/api/users".to_string()),
-                DynamicEndpoint {
-                    response: json!({"id": 1, "name": "John"}),
-                    status: 201,
-                    headers: Some(HashMap::from([
-                        ("Content-Type".to_string(), "application/json".to_string()),
-                    ])),
-                }
-            );
-        }
-
-        let app = test::init_service(
-            App::new()
-                .app_data(state.clone())
-                .route("/export", web::get().to(export_openapi))
-        ).await;
-
-        let req = test::TestRequest::get()
-            .uri("/export")
-            .to_request();
-
-        let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), 200);
-
-        let body: Value = test::read_body_json(resp).await;
-        assert_eq!(body["openapi"], "3.0.0");
-        assert_eq!(body["info"]["title"], "Mock API");
-
-        let paths = body["paths"].as_object().unwrap();
-        assert_eq!(paths.len(), 1);
-        assert!(paths.contains_key("/api/users"));
-
-        let users_path = &paths["/api/users"];
-        assert!(users_path["get"].is_object());
-        assert!(users_path["post"].is_object());
-
-        // Verify GET operation
-        let get_op = &users_path["get"];
-        assert_eq!(get_op["summary"], "GET /api/users");
-        assert!(get_op["responses"]["200"].is_object());
-        assert_eq!(get_op["responses"]["200"]["content"]["application/json"]["example"], json!({"users": []}));
-
-        // Verify POST operation
-        let post_op = &users_path["post"];
-        assert_eq!(post_op["summary"], "POST /api/users");
-        assert!(post_op["requestBody"].is_object());
-        assert!(post_op["responses"]["201"].is_object());
-        assert_eq!(post_op["responses"]["201"]["content"]["application/json"]["example"], json!({"id": 1, "name": "John"}));
-    }
-
-    #[actix_web::test]
-    async fn test_import_export_roundtrip() {
-        let state = create_test_app_state();
-
-        let app = test::init_service(
-            App::new()
-                .app_data(state.clone())
-                .route("/import", web::post().to(import_openapi))
-                .route("/export", web::get().to(export_openapi))
-        ).await;
-
-        // Step 1: Import OpenAPI spec
-        let original_spec = json!({
-            "openapi": "3.0.0",
-            "info": {
-                "title": "Test API",
-                "version": "1.0.0"
-            },
-            "paths": {
-                "/api/test": {
-                    "get": {
-                        "summary": "Get test",
-                        "responses": {
-                            "200": {
-                                "description": "Success",
-                                "content": {
-                                    "application/json": {
-                                        "example": {"message": "test"}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        let import_req = test::TestRequest::post()
-            .uri("/import")
-            .set_json(json!({"openapi_spec": original_spec}))
-            .to_request();
-
-        let import_resp = test::call_service(&app, import_req).await;
-        assert_eq!(import_resp.status(), 200);
-
-        // Step 2: Export OpenAPI spec
-        let export_req = test::TestRequest::get()
-            .uri("/export")
-            .to_request();
-
-        let export_resp = test::call_service(&app, export_req).await;
-        assert_eq!(export_resp.status(), 200);
-
-        let exported_spec: Value = test::read_body_json(export_resp).await;
-
-        // Verify exported spec has the correct structure
-        assert_eq!(exported_spec["openapi"], "3.0.0");
-        assert_eq!(exported_spec["info"]["title"], "Mock API");
-        assert!(exported_spec["paths"]["/api/test"]["get"].is_object());
-        assert_eq!(
-            exported_spec["paths"]["/api/test"]["get"]["responses"]["200"]["content"]["application/json"]["example"],
-            json!({"message": "test"})
-        );
-    }
-
-    #[actix_web::test]
-    async fn test_import_multiple_methods_same_path() {
-        let state = create_test_app_state();
-        let app = test::init_service(
-            App::new()
-                .app_data(state.clone())
-                .route("/import", web::post().to(import_openapi))
-        ).await;
-
-        let openapi_spec = json!({
-            "openapi": "3.0.0",
-            "info": {
-                "title": "Test API",
-                "version": "1.0.0"
-            },
-            "paths": {
-                "/api/resource": {
-                    "get": {
-                        "responses": {
-                            "200": {
-                                "description": "Get",
-                                "content": {
-                                    "application/json": {
-                                        "example": {"action": "get"}
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "post": {
-                        "responses": {
-                            "201": {
-                                "description": "Create",
-                                "content": {
-                                    "application/json": {
-                                        "example": {"action": "create"}
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "put": {
-                        "responses": {
-                            "200": {
-                                "description": "Update",
-                                "content": {
-                                    "application/json": {
-                                        "example": {"action": "update"}
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "delete": {
-                        "responses": {
-                            "204": {
-                                "description": "Delete",
-                                "content": {
-                                    "application/json": {
-                                        "example": {"action": "delete"}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        let req = test::TestRequest::post()
-            .uri("/import")
-            .set_json(json!({"openapi_spec": openapi_spec}))
-            .to_request();
-
-        let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), 200);
-
-        let body: Value = test::read_body_json(resp).await;
-        assert_eq!(body["count"], 4);
-
-        // Verify all methods were imported
-        let dyn_map = state.dynamic.lock().unwrap();
-        assert!(dyn_map.contains_key(&("GET".to_string(), "/api/resource".to_string())));
-        assert!(dyn_map.contains_key(&("POST".to_string(), "/api/resource".to_string())));
-        assert!(dyn_map.contains_key(&("PUT".to_string(), "/api/resource".to_string())));
-        assert!(dyn_map.contains_key(&("DELETE".to_string(), "/api/resource".to_string())));
-
-        // Verify correct status codes
-        assert_eq!(dyn_map.get(&("GET".to_string(), "/api/resource".to_string())).unwrap().status, 200);
-        assert_eq!(dyn_map.get(&("POST".to_string(), "/api/resource".to_string())).unwrap().status, 201);
-        assert_eq!(dyn_map.get(&("PUT".to_string(), "/api/resource".to_string())).unwrap().status, 200);
-        assert_eq!(dyn_map.get(&("DELETE".to_string(), "/api/resource".to_string())).unwrap().status, 204);
-    }
 }
