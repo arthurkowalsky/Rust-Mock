@@ -5,9 +5,9 @@ import LogTable from "@/components/LogTable";
 import AddEndpointForm from "@/components/AddEndpointForm";
 import TestEndpoint from "@/components/TestEndpoint";
 import { Endpoint } from "@/types";
-import { fetchEndpoints, fetchLogs, exportEndpoints } from "@/utils/api";
+import { fetchEndpoints, fetchLogs, exportEndpoints, importOpenAPI, exportOpenAPI } from "@/utils/api";
 import { Button } from "@/components/ui/button";
-import { Download } from "lucide-react";
+import { Download, Upload, FileJson } from "lucide-react";
 import { toast } from "sonner";
 
 const Index = () => {
@@ -69,36 +69,48 @@ const Index = () => {
     toast.success("Endpoints exported successfully");
   };
   
-  const handleImportEndpoints = () => {
+  const handleImportOpenAPI = () => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".json";
-    
+
     input.onchange = (e: any) => {
       const file = e.target.files[0];
       if (!file) return;
-      
+
       const reader = new FileReader();
       reader.onload = async (event) => {
         try {
-          const importedEndpoints = JSON.parse(event.target?.result as string);
-          
-          if (!Array.isArray(importedEndpoints)) {
-            toast.error("Invalid import file format");
+          const openApiSpec = JSON.parse(event.target?.result as string);
+
+          if (!openApiSpec.openapi || !openApiSpec.paths) {
+            toast.error("Invalid OpenAPI specification format");
             return;
           }
-          
-          toast.info("Import functionality will be added in a future update");
+
+          const result = await importOpenAPI(openApiSpec);
+
+          if (!result.error) {
+            await loadEndpoints();
+          }
         } catch (error) {
-          toast.error("Failed to parse import file");
+          toast.error("Failed to parse OpenAPI file");
           console.error(error);
         }
       };
-      
+
       reader.readAsText(file);
     };
-    
+
     input.click();
+  };
+
+  const handleExportOpenAPI = async () => {
+    if (endpoints.length === 0) {
+      toast.error("No endpoints to export");
+      return;
+    }
+    await exportOpenAPI();
   };
   
   const renderTabContent = () => {
@@ -109,9 +121,17 @@ const Index = () => {
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold">Endpoints</h2>
               <div className="flex space-x-2">
+                <Button variant="outline" size="sm" onClick={handleImportOpenAPI}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Import OpenAPI
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleExportOpenAPI}>
+                  <FileJson className="h-4 w-4 mr-2" />
+                  Export OpenAPI
+                </Button>
                 <Button variant="outline" size="sm" onClick={handleExportEndpoints}>
                   <Download className="h-4 w-4 mr-2" />
-                  Export
+                  Export JSON
                 </Button>
               </div>
             </div>

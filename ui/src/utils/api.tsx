@@ -232,11 +232,84 @@ export const testEndpoint = async (
 export const exportEndpoints = (endpoints: Endpoint[]): void => {
   const dataStr = JSON.stringify(endpoints, null, 2);
   const dataUri = `data:application/json;charset=utf-8,${encodeURIComponent(dataStr)}`;
-  
+
   const exportFileDefaultName = `rustmock-endpoints-${new Date().toISOString().slice(0, 10)}.json`;
-  
+
   const linkElement = document.createElement("a");
   linkElement.setAttribute("href", dataUri);
   linkElement.setAttribute("download", exportFileDefaultName);
   linkElement.click();
+};
+
+export const clearLogs = async (): Promise<void> => {
+  try {
+    const response = await fetch(`${getBaseUrl()}/__mock/logs`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error clearing logs: ${response.statusText}`);
+    }
+
+    toast.success("Logs cleared successfully");
+  } catch (error) {
+    console.error("Failed to clear logs:", error);
+    toast.error("Failed to clear logs. Check if Rust Mock server is running.");
+  }
+};
+
+export const importOpenAPI = async (openApiSpec: any): Promise<EndpointResponse> => {
+  try {
+    const response = await fetch(`${getBaseUrl()}/__mock/import`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ openapi_spec: openApiSpec }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `Error importing OpenAPI: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+
+    if (result.imported) {
+      toast.success(`Successfully imported ${result.count} endpoint(s) from OpenAPI specification`);
+    }
+
+    return result;
+  } catch (error) {
+    console.error("Failed to import OpenAPI:", error);
+    toast.error(`Failed to import OpenAPI: ${error instanceof Error ? error.message : String(error)}`);
+    return { error: String(error) };
+  }
+};
+
+export const exportOpenAPI = async (): Promise<void> => {
+  try {
+    const response = await fetch(`${getBaseUrl()}/__mock/export`);
+
+    if (!response.ok) {
+      throw new Error(`Error exporting OpenAPI: ${response.statusText}`);
+    }
+
+    const openApiSpec = await response.json();
+
+    const dataStr = JSON.stringify(openApiSpec, null, 2);
+    const dataUri = `data:application/json;charset=utf-8,${encodeURIComponent(dataStr)}`;
+
+    const exportFileDefaultName = `openapi-spec-${new Date().toISOString().slice(0, 10)}.json`;
+
+    const linkElement = document.createElement("a");
+    linkElement.setAttribute("href", dataUri);
+    linkElement.setAttribute("download", exportFileDefaultName);
+    linkElement.click();
+
+    toast.success("OpenAPI specification exported successfully");
+  } catch (error) {
+    console.error("Failed to export OpenAPI:", error);
+    toast.error("Failed to export OpenAPI. Check if Rust Mock server is running.");
+  }
 };
