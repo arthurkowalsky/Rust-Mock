@@ -6,6 +6,9 @@ on:
       - '*'
     tags:
       - '[0-9]+\.[0-9]+\.[0-9]+'
+  pull_request:
+    branches:
+      - '*'
 
 env:
   REGISTRY: ghcr.io
@@ -49,7 +52,7 @@ jobs:
         run: cargo build --release
 
       - name: Run API Tests
-        run: cargo test --test api_unit_tests --verbose
+        run: cargo test --test api_tests --verbose
 
   docker:
     needs: build
