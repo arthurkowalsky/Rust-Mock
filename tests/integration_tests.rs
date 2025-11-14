@@ -1351,3 +1351,338 @@ async fn test_import_comprehensive_openapi_spec() {
     assert!(paths.contains_key("/api/users/{user_id}"));
     assert!(paths.contains_key("/api/users/{user_id}/posts/{post_id}"));
 }
+
+// ========== PROXY MODE TESTS ==========
+
+#[tokio::test]
+async fn test_proxy_config_endpoints() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    // Test 1: Get proxy config (should be None initially)
+    let resp = client
+        .get(format!("{}/__mock/proxy", BASE_URL))
+        .send()
+        .await
+        .expect("Failed to get proxy config");
+
+    assert!(resp.status().is_success());
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["enabled"], false);
+    assert_eq!(body["proxy_url"], serde_json::Value::Null);
+
+    // Test 2: Set proxy URL
+    let resp = client
+        .post(format!("{}/__mock/proxy", BASE_URL))
+        .json(&json!({"url": "https://httpbin.org"}))
+        .send()
+        .await
+        .expect("Failed to set proxy");
+
+    assert!(resp.status().is_success());
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["enabled"], true);
+    assert_eq!(body["proxy_url"], "https://httpbin.org");
+
+    // Test 3: Verify proxy was set
+    let resp = client
+        .get(format!("{}/__mock/proxy", BASE_URL))
+        .send()
+        .await
+        .unwrap();
+
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["enabled"], true);
+    assert_eq!(body["proxy_url"], "https://httpbin.org");
+
+    // Test 4: Delete proxy
+    let resp = client
+        .delete(format!("{}/__mock/proxy", BASE_URL))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(resp.status().is_success());
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["deleted"], true);
+
+    // Test 5: Verify proxy was deleted
+    let resp = client
+        .get(format!("{}/__mock/proxy", BASE_URL))
+        .send()
+        .await
+        .unwrap();
+
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["enabled"], false);
+}
+
+#[tokio::test]
+async fn test_endpoint_with_proxy_url() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    // Add endpoint with proxy_url pointing to httpbin.org
+    let resp = client
+        .post(format!("{}/__mock/endpoints", BASE_URL))
+        .json(&json!({
+            "method": "GET",
+            "path": "/test/proxy",
+            "response": {"mock": "this should not be returned"},
+            "status": 200,
+            "proxy_url": "https://httpbin.org"
+        }))
+        .send()
+        .await
+        .expect("Failed to add endpoint");
+
+    assert!(resp.status().is_success());
+
+    // Call the endpoint - should proxy to httpbin.org/test/proxy
+    let resp = client
+        .get(format!("{}/test/proxy", BASE_URL))
+        .send()
+        .await
+        .unwrap();
+
+    // httpbin.org/test/proxy doesn't exist, so we should get 404 from httpbin
+    // This proves it's proxying, not returning the mock
+    assert_eq!(resp.status().as_u16(), 404);
+}
+
+#[tokio::test]
+async fn test_endpoint_proxy_to_httpbin_status() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    // Add endpoint with proxy_url to httpbin.org/status/201
+    let resp = client
+        .post(format!("{}/__mock/endpoints", BASE_URL))
+        .json(&json!({
+            "method": "GET",
+            "path": "/status/201",
+            "response": {},
+            "status": 200,
+            "proxy_url": "https://httpbin.org"
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(resp.status().is_success());
+
+    // Call endpoint - should get 201 from httpbin
+    let resp = client
+        .get(format!("{}/status/201", BASE_URL))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status().as_u16(), 201);
+}
+
+#[tokio::test]
+async fn test_default_proxy_mode() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    // Set default proxy to httpbin.org
+    let resp = client
+        .post(format!("{}/__mock/proxy", BASE_URL))
+        .json(&json!({"url": "https://httpbin.org"}))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(resp.status().is_success());
+
+    // Call an unmocked endpoint - should proxy to httpbin.org/get
+    let resp = client
+        .get(format!("{}/get", BASE_URL))
+        .send()
+        .await
+        .unwrap();
+
+    // httpbin.org/get returns 200 with JSON
+    assert_eq!(resp.status().as_u16(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+
+    // httpbin.org/get returns url, headers, etc
+    assert!(body.get("url").is_some() || body.get("headers").is_some());
+}
+
+#[tokio::test]
+async fn test_mixed_mock_and_proxy() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    // Set default proxy
+    client
+        .post(format!("{}/__mock/proxy", BASE_URL))
+        .json(&json!({"url": "https://httpbin.org"}))
+        .send()
+        .await
+        .unwrap();
+
+    // Add a mock endpoint (no proxy_url)
+    client
+        .post(format!("{}/__mock/endpoints", BASE_URL))
+        .json(&json!({
+            "method": "GET",
+            "path": "/mock/users",
+            "response": {"users": [{"id": 1, "name": "Mock User"}]},
+            "status": 200
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // Add a proxy endpoint (with proxy_url)
+    client
+        .post(format!("{}/__mock/endpoints", BASE_URL))
+        .json(&json!({
+            "method": "GET",
+            "path": "/uuid",
+            "response": {},
+            "status": 200,
+            "proxy_url": "https://httpbin.org"
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // Test 1: Mock endpoint returns mock data
+    let resp1 = client
+        .get(format!("{}/mock/users", BASE_URL))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp1.status().as_u16(), 200);
+    let body1: serde_json::Value = resp1.json().await.unwrap();
+    assert_eq!(body1["users"][0]["name"], "Mock User");
+
+    // Test 2: Proxy endpoint goes to httpbin
+    let resp2 = client
+        .get(format!("{}/uuid", BASE_URL))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp2.status().as_u16(), 200);
+    let body2: serde_json::Value = resp2.json().await.unwrap();
+    // httpbin.org/uuid returns {"uuid": "..."}
+    assert!(body2.get("uuid").is_some());
+
+    // Test 3: Unmocked endpoint goes to default proxy (httpbin.org/headers)
+    let resp3 = client
+        .get(format!("{}/headers", BASE_URL))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp3.status().as_u16(), 200);
+    let body3: serde_json::Value = resp3.json().await.unwrap();
+    // httpbin.org/headers returns {"headers": {...}}
+    assert!(body3.get("headers").is_some());
+}
+
+#[tokio::test]
+async fn test_proxy_with_query_params() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    // Add endpoint with proxy
+    client
+        .post(format!("{}/__mock/endpoints", BASE_URL))
+        .json(&json!({
+            "method": "GET",
+            "path": "/get",
+            "response": {},
+            "status": 200,
+            "proxy_url": "https://httpbin.org"
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // Call with query params
+    let resp = client
+        .get(format!("{}/get?foo=bar&baz=qux", BASE_URL))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status().as_u16(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+
+    // httpbin.org/get returns query params in "args"
+    assert_eq!(body["args"]["foo"], "bar");
+    assert_eq!(body["args"]["baz"], "qux");
+}
+
+#[tokio::test]
+async fn test_proxy_post_with_body() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    // Add POST endpoint with proxy
+    client
+        .post(format!("{}/__mock/endpoints", BASE_URL))
+        .json(&json!({
+            "method": "POST",
+            "path": "/post",
+            "response": {},
+            "status": 200,
+            "proxy_url": "https://httpbin.org"
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // Send POST request with body
+    let resp = client
+        .post(format!("{}/post", BASE_URL))
+        .json(&json!({"test": "data", "number": 42}))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status().as_u16(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+
+    // httpbin.org/post echoes back the JSON data
+    assert_eq!(body["json"]["test"], "data");
+    assert_eq!(body["json"]["number"], 42);
+}
+
+#[tokio::test]
+async fn test_proxy_failure_returns_502() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    // Add endpoint with invalid proxy URL
+    client
+        .post(format!("{}/__mock/endpoints", BASE_URL))
+        .json(&json!({
+            "method": "GET",
+            "path": "/test/fail",
+            "response": {},
+            "status": 200,
+            "proxy_url": "http://invalid-host-that-does-not-exist-12345.com"
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // Call endpoint - should get 502 Bad Gateway
+    let resp = client
+        .get(format!("{}/test/fail", BASE_URL))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status().as_u16(), 502);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(body["error"].as_str().unwrap().contains("Proxy request failed"));
+}

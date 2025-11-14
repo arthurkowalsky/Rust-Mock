@@ -28,6 +28,7 @@ const DEFAULT_ENDPOINT: Endpoint = {
   response: {},
   status: 200,
   headers: {},
+  proxy_url: undefined,
 };
 
 interface AddEndpointFormProps {
@@ -53,7 +54,7 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
     value: string | number | object
   ) => {
     const updatedEndpoint = { ...endpoint };
-    
+
     if (field === "path") {
       const pathString = value as string;
       setIsValidPath(validatePath(pathString));
@@ -64,8 +65,11 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
       updatedEndpoint[field] = Number(value);
     } else if (field === "response") {
       updatedEndpoint[field] = value;
+    } else if (field === "proxy_url") {
+      const proxyUrl = value as string;
+      updatedEndpoint[field] = proxyUrl.trim() === "" ? undefined : proxyUrl.trim();
     }
-    
+
     setEndpoint(updatedEndpoint);
   };
 
@@ -181,13 +185,14 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
             </div>
           </div>
 
-          {/* Tabs for Response & Headers */}
+          {/* Tabs for Response, Headers & Proxy */}
           <Tabs defaultValue="response">
             <TabsList>
               <TabsTrigger value="response">Response</TabsTrigger>
               <TabsTrigger value="headers">Headers</TabsTrigger>
+              <TabsTrigger value="proxy">Proxy</TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="response" className="pt-4">
               <div className="space-y-2">
                 <Label>Response Body (JSON)</Label>
@@ -198,7 +203,7 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
                 />
               </div>
             </TabsContent>
-            
+
             <TabsContent value="headers" className="pt-4">
               <div className="space-y-2">
                 <Label>Response Headers</Label>
@@ -207,6 +212,33 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
                   onChange={handleHeadersChange}
                   placeholder={{ key: "Header", value: "Value" }}
                 />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="proxy" className="pt-4">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="proxy_url">Proxy URL (optional)</Label>
+                  <Input
+                    id="proxy_url"
+                    value={endpoint.proxy_url || ""}
+                    onChange={(e) => handleChange("proxy_url", e.target.value)}
+                    placeholder="https://api.example.com"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    If set, requests to this endpoint will be forwarded to the specified URL instead of returning the mock response.
+                  </p>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+                  <h4 className="font-semibold text-blue-900 mb-2">Smart Proxy Mode</h4>
+                  <ul className="text-sm text-blue-800 space-y-1">
+                    <li>• Leave empty to use mock response</li>
+                    <li>• Set a URL to proxy requests to a real API</li>
+                    <li>• Headers, query params, and body are forwarded automatically</li>
+                    <li>• Useful for testing new endpoints while keeping production data</li>
+                  </ul>
+                </div>
               </div>
             </TabsContent>
           </Tabs>

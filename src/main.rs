@@ -3,9 +3,10 @@ use actix_web::{middleware::Logger, guard, web, App, HttpRequest, HttpResponse, 
 use chrono::Local;
 use clap::Parser;
 use env_logger::Builder;
-use log::{info, LevelFilter};
+use log::{info, warn, LevelFilter};
 use openapiv3::{OpenAPI, Operation, ReferenceOr, StatusCode};
 use regex::Regex;
+use reqwest;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{collections::{HashMap, HashSet}, env, fs, sync::Mutex};
@@ -27,6 +28,7 @@ pub struct RequestLog {
     // Metadata
     pub timestamp: String,
     pub matched_endpoint: Option<String>,
+    pub proxied_to: Option<String>,
 }
 
 #[derive(Clone)]
@@ -43,7 +45,7 @@ pub struct AppState {
     pub spec: Option<OpenAPI>,
     pub raw_spec: Option<Value>,
     pub logs: Mutex<Vec<RequestLog>>,
-    pub default_proxy_url: Option<String>,
+    pub default_proxy_url: Mutex<Option<String>>,
 }
 
 #[derive(Parser)]
@@ -52,7 +54,7 @@ struct Config {
     host: String,
     #[clap(long, default_value = "8090")]
     port: u16,
-    #[clap(long, env = "DEFAULT_PROXY_URL")]
+    #[clap(long)]
     default_proxy_url: Option<String>,
 }
 
@@ -203,6 +205,38 @@ pub async fn clear_logs(data: web::Data<AppState>) -> impl Responder {
 }
 
 #[derive(Deserialize)]
+pub struct ProxyConfig {
+    pub url: String,
+}
+
+pub async fn get_proxy(data: web::Data<AppState>) -> impl Responder {
+    let proxy_url = data.default_proxy_url.lock().unwrap().clone();
+    HttpResponse::Ok().json(json!({
+        "proxy_url": proxy_url,
+        "enabled": proxy_url.is_some()
+    }))
+}
+
+pub async fn set_proxy(data: web::Data<AppState>, cfg: web::Json<ProxyConfig>) -> impl Responder {
+    let url = cfg.url.trim().to_string();
+    if url.is_empty() {
+        *data.default_proxy_url.lock().unwrap() = None;
+        info!("Disabled default proxy");
+        HttpResponse::Ok().json(json!({"proxy_url": null, "enabled": false}))
+    } else {
+        *data.default_proxy_url.lock().unwrap() = Some(url.clone());
+        info!("Set default proxy URL to: {}", url);
+        HttpResponse::Ok().json(json!({"proxy_url": url, "enabled": true}))
+    }
+}
+
+pub async fn delete_proxy(data: web::Data<AppState>) -> impl Responder {
+    *data.default_proxy_url.lock().unwrap() = None;
+    info!("Deleted default proxy");
+    HttpResponse::Ok().json(json!({"deleted": true}))
+}
+
+#[derive(Deserialize)]
 pub struct ImportRequest {
     pub openapi_spec: Value,
 }
@@ -349,6 +383,79 @@ pub async fn export_openapi(data: web::Data<AppState>) -> impl Responder {
         .json(openapi_spec)
 }
 
+async fn forward_to_proxy(
+    proxy_url: &str,
+    req: &HttpRequest,
+    body: &web::Bytes,
+    query: &str,
+) -> Result<(u16, Option<Value>, HashMap<String, String>), String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    // Build full URL
+    let full_url = if query.is_empty() {
+        format!("{}{}", proxy_url.trim_end_matches('/'), req.path())
+    } else {
+        format!("{}{}?{}", proxy_url.trim_end_matches('/'), req.path(), query)
+    };
+
+    info!("Proxying {} {} to {}", req.method(), req.path(), full_url);
+
+    // Copy headers (exclude Host and other hop-by-hop headers)
+    let mut headers = reqwest::header::HeaderMap::new();
+    for (key, value) in req.headers() {
+        let key_str = key.as_str().to_lowercase();
+        if key_str != "host" && key_str != "connection" && key_str != "transfer-encoding" {
+            if let Ok(header_name) = reqwest::header::HeaderName::from_bytes(key.as_str().as_bytes()) {
+                if let Ok(header_value) = reqwest::header::HeaderValue::from_bytes(value.as_bytes()) {
+                    headers.insert(header_name, header_value);
+                }
+            }
+        }
+    }
+
+    // Forward request
+    let method = match req.method().as_str() {
+        "GET" => reqwest::Method::GET,
+        "POST" => reqwest::Method::POST,
+        "PUT" => reqwest::Method::PUT,
+        "PATCH" => reqwest::Method::PATCH,
+        "DELETE" => reqwest::Method::DELETE,
+        "HEAD" => reqwest::Method::HEAD,
+        "OPTIONS" => reqwest::Method::OPTIONS,
+        _ => reqwest::Method::GET,
+    };
+
+    let response = client
+        .request(method, &full_url)
+        .headers(headers)
+        .body(body.to_vec())
+        .send()
+        .await
+        .map_err(|e| format!("Proxy request failed: {}", e))?;
+
+    let status = response.status().as_u16();
+
+    // Extract response headers
+    let mut response_headers = HashMap::new();
+    for (key, value) in response.headers() {
+        if let Ok(val_str) = value.to_str() {
+            response_headers.insert(key.to_string(), val_str.to_string());
+        }
+    }
+
+    // Try to parse response body as JSON, fallback to raw text
+    let response_body = if let Ok(json_body) = response.json::<Value>().await {
+        Some(json_body)
+    } else {
+        None
+    };
+
+    Ok((status, response_body, response_headers))
+}
+
 pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppState>) -> impl Responder {
     let method = req.method().as_str().to_uppercase();
     let path = req.path().to_string();
@@ -382,20 +489,84 @@ pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppSta
     // Capture response data for logging
     let mut response_body: Option<Value> = None;
     let mut response_headers = HashMap::new();
+    let mut proxied_to: Option<String> = None;
     let status: u16;
 
     let response = if let Some(ep) = matched_endpoint {
-        status = ep.status;
-        response_body = Some(ep.response.clone());
+        // Check if endpoint has proxy_url configured
+        if let Some(proxy_url) = &ep.proxy_url {
+            // PROXY MODE: Forward to upstream
+            match forward_to_proxy(proxy_url, &req, &body, &query).await {
+                Ok((proxy_status, proxy_body, proxy_headers)) => {
+                    status = proxy_status;
+                    response_body = proxy_body.clone();
+                    response_headers = proxy_headers.clone();
+                    proxied_to = Some(format!("{}{}", proxy_url, path));
+                    matched_pattern = Some(format!("proxy to {}", proxy_url));
 
-        // Add custom headers if present
-        if let Some(custom_headers) = &ep.headers {
-            response_headers.extend(custom_headers.clone());
+                    let mut builder = HttpResponse::build(
+                        actix_web::http::StatusCode::from_u16(proxy_status).unwrap()
+                    );
+                    for (k, v) in proxy_headers {
+                        builder.insert_header((k.as_str(), v.as_str()));
+                    }
+                    if let Some(json_body) = proxy_body {
+                        builder.json(json_body)
+                    } else {
+                        builder.finish()
+                    }
+                }
+                Err(e) => {
+                    warn!("Proxy request failed: {}", e);
+                    status = 502;
+                    response_body = Some(json!({"error": "Proxy request failed", "details": e}));
+                    HttpResponse::BadGateway().json(json!({"error": "Proxy request failed", "details": e}))
+                }
+            }
+        } else {
+            // MOCK MODE: Return mock response
+            status = ep.status;
+            response_body = Some(ep.response.clone());
+
+            // Add custom headers if present
+            if let Some(custom_headers) = &ep.headers {
+                response_headers.extend(custom_headers.clone());
+            }
+            response_headers.insert("content-type".to_string(), "application/json".to_string());
+
+            HttpResponse::build(actix_web::http::StatusCode::from_u16(ep.status).unwrap()).json(&ep.response)
         }
-        response_headers.insert("content-type".to_string(), "application/json".to_string());
+    } else if let Some(default_proxy) = data.default_proxy_url.lock().unwrap().clone() {
+        // DEFAULT PROXY MODE: Forward to default proxy URL
+        match forward_to_proxy(&default_proxy, &req, &body, &query).await {
+            Ok((proxy_status, proxy_body, proxy_headers)) => {
+                status = proxy_status;
+                response_body = proxy_body.clone();
+                response_headers = proxy_headers.clone();
+                proxied_to = Some(format!("{}{}", default_proxy, path));
+                matched_pattern = Some(format!("default proxy to {}", default_proxy));
 
-        HttpResponse::build(actix_web::http::StatusCode::from_u16(ep.status).unwrap()).json(&ep.response)
+                let mut builder = HttpResponse::build(
+                    actix_web::http::StatusCode::from_u16(proxy_status).unwrap()
+                );
+                for (k, v) in proxy_headers {
+                    builder.insert_header((k.as_str(), v.as_str()));
+                }
+                if let Some(json_body) = proxy_body {
+                    builder.json(json_body)
+                } else {
+                    builder.finish()
+                }
+            }
+            Err(e) => {
+                warn!("Default proxy request failed: {}", e);
+                status = 502;
+                response_body = Some(json!({"error": "Default proxy request failed", "details": e}));
+                HttpResponse::BadGateway().json(json!({"error": "Default proxy request failed", "details": e}))
+            }
+        }
     } else if let Some(spec) = &data.spec {
+        // OPENAPI SPEC MODE: Return example from spec
         if let Some(op) = get_operation(spec, &method, &path) {
             if let Some(example) = extract_example_response(&op) {
                 status = 200;
@@ -412,6 +583,7 @@ pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppSta
             HttpResponse::NotFound().finish()
         }
     } else {
+        // NO MATCH: 404
         status = 404;
         HttpResponse::NotFound().finish()
     };
@@ -430,6 +602,7 @@ pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppSta
         response_headers,
         timestamp,
         matched_endpoint: matched_pattern,
+        proxied_to,
     });
 
     response
@@ -438,7 +611,13 @@ pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppSta
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     Builder::new().filter(None, LevelFilter::Info).init();
-    let cfg = Config::parse();
+    let mut cfg = Config::parse();
+
+    // Check env variable for default proxy URL if not set via CLI
+    if cfg.default_proxy_url.is_none() {
+        cfg.default_proxy_url = env::var("DEFAULT_PROXY_URL").ok();
+    }
+
     info!("Starting server host={} port={}", cfg.host, cfg.port);
     let raw = env::var("OPENAPI_FILE").ok()
         .and_then(|p| fs::read_to_string(&p).ok())
@@ -460,7 +639,17 @@ async fn main() -> std::io::Result<()> {
     } else if raw.is_none() {
         info!("No OPENAPI_FILE specified");
     }
-    let state = web::Data::new(AppState { dynamic: Mutex::new(HashMap::new()), removed_spec: Mutex::new(HashSet::new()), spec, raw_spec: raw, logs: Mutex::new(vec![]) });
+    if let Some(ref url) = cfg.default_proxy_url {
+        info!("Default proxy URL configured: {}", url);
+    }
+    let state = web::Data::new(AppState {
+        dynamic: Mutex::new(HashMap::new()),
+        removed_spec: Mutex::new(HashSet::new()),
+        spec,
+        raw_spec: raw,
+        logs: Mutex::new(vec![]),
+        default_proxy_url: Mutex::new(cfg.default_proxy_url),
+    });
     HttpServer::new(move || {
         App::new()
             .app_data(state.clone())
@@ -472,7 +661,10 @@ async fn main() -> std::io::Result<()> {
                 .route("/logs", web::get().to(get_logs))
                 .route("/logs", web::delete().to(clear_logs))
                 .route("/import", web::post().to(import_openapi))
-                .route("/export", web::get().to(export_openapi)))
+                .route("/export", web::get().to(export_openapi))
+                .route("/proxy", web::get().to(get_proxy))
+                .route("/proxy", web::post().to(set_proxy))
+                .route("/proxy", web::delete().to(delete_proxy)))
             .service(web::scope("")
                 .guard(guard::Get())
                 .service(Files::new("/", "./ui/dist").index_file("index.html").default_handler(web::route().to(dispatch))))

@@ -1,5 +1,5 @@
 
-import { Endpoint, EndpointResponse, RequestLog, ServerConfig } from "@/types";
+import { Endpoint, EndpointResponse, RequestLog, ServerConfig, ProxyConfig } from "@/types";
 import { toast } from "sonner";
 
 const getBaseUrl = (): string => {
@@ -311,5 +311,66 @@ export const exportOpenAPI = async (): Promise<void> => {
   } catch (error) {
     console.error("Failed to export OpenAPI:", error);
     toast.error("Failed to export OpenAPI. Check if Rust Mock server is running.");
+  }
+};
+
+export const getProxyConfig = async (): Promise<ProxyConfig | null> => {
+  try {
+    const response = await fetch(`${getBaseUrl()}/__mock/proxy`);
+    if (!response.ok) {
+      throw new Error(`Error fetching proxy config: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Failed to fetch proxy config:", error);
+    toast.error("Failed to fetch proxy configuration");
+    return null;
+  }
+};
+
+export const setProxyConfig = async (url: string): Promise<ProxyConfig | null> => {
+  try {
+    const response = await fetch(`${getBaseUrl()}/__mock/proxy`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ url }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error setting proxy config: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+
+    if (result.enabled) {
+      toast.success(`Default proxy URL set to: ${result.proxy_url}`);
+    } else {
+      toast.success("Default proxy disabled");
+    }
+
+    return result;
+  } catch (error) {
+    console.error("Failed to set proxy config:", error);
+    toast.error("Failed to set proxy configuration");
+    return null;
+  }
+};
+
+export const deleteProxyConfig = async (): Promise<void> => {
+  try {
+    const response = await fetch(`${getBaseUrl()}/__mock/proxy`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error deleting proxy config: ${response.statusText}`);
+    }
+
+    toast.success("Default proxy removed");
+  } catch (error) {
+    console.error("Failed to delete proxy config:", error);
+    toast.error("Failed to delete proxy configuration");
   }
 };
