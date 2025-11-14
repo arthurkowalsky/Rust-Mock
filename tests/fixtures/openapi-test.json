@@ -1,0 +1,401 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Comprehensive Test API",
+    "description": "API for testing various OpenAPI import scenarios",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/users": {
+      "get": {
+        "summary": "List all users",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "example": {
+                  "users": [
+                    {"id": 1, "name": "John Doe", "email": "john@example.com"},
+                    {"id": 2, "name": "Jane Smith", "email": "jane@example.com"}
+                  ],
+                  "total": 2
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a new user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {"type": "string"},
+                  "email": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": 3,
+                  "name": "New User",
+                  "email": "new@example.com",
+                  "created_at": "2024-01-15T10:30:00Z"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/{user_id}": {
+      "get": {
+        "summary": "Get user by ID",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The user ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User found",
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": 1,
+                  "name": "John Doe",
+                  "email": "john@example.com",
+                  "created_at": "2024-01-01T00:00:00Z"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update user",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User updated",
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": 1,
+                  "name": "Updated Name",
+                  "email": "updated@example.com",
+                  "updated_at": "2024-01-15T10:30:00Z"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete user",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "User deleted successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "User deleted",
+                  "deleted_id": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/{user_id}/posts": {
+      "get": {
+        "summary": "Get user posts",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User posts",
+            "content": {
+              "application/json": {
+                "example": {
+                  "user_id": 1,
+                  "posts": [
+                    {"id": 1, "title": "First Post", "content": "Hello World"},
+                    {"id": 2, "title": "Second Post", "content": "Another post"}
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/{user_id}/posts/{post_id}": {
+      "get": {
+        "summary": "Get specific user post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "post_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Post details",
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": 1,
+                  "user_id": 1,
+                  "title": "My Post",
+                  "content": "Post content here",
+                  "created_at": "2024-01-10T12:00:00Z"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/products": {
+      "get": {
+        "summary": "List products",
+        "responses": {
+          "200": {
+            "description": "Product list",
+            "content": {
+              "application/json": {
+                "example": {
+                  "products": [
+                    {"id": 1, "name": "Product A", "price": 29.99},
+                    {"id": 2, "name": "Product B", "price": 49.99}
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/products/{product_id}": {
+      "get": {
+        "summary": "Get product details",
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product details",
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": "prod-123",
+                  "name": "Amazing Product",
+                  "price": 99.99,
+                  "in_stock": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/orders/{order_id}/items/{item_id}": {
+      "get": {
+        "summary": "Get order item",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order item details",
+            "content": {
+              "application/json": {
+                "example": {
+                  "order_id": "order-456",
+                  "item_id": "item-789",
+                  "product_name": "Test Product",
+                  "quantity": 2,
+                  "price": 59.99
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update order item",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Item updated",
+            "content": {
+              "application/json": {
+                "example": {
+                  "order_id": "order-456",
+                  "item_id": "item-789",
+                  "updated": true,
+                  "quantity": 3
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "Health check endpoint",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "example": {
+                  "status": "healthy",
+                  "timestamp": "2024-01-15T10:30:00Z",
+                  "version": "1.0.0"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/status": {
+      "get": {
+        "summary": "Service status",
+        "responses": {
+          "200": {
+            "description": "Service status",
+            "content": {
+              "application/json": {
+                "example": {
+                  "uptime": 3600,
+                  "requests_processed": 1234,
+                  "memory_usage": "128MB"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

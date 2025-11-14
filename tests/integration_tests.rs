@@ -1113,3 +1113,241 @@ async fn test_call_imported_endpoint() {
     assert_eq!(body["source"], "imported");
     assert_eq!(body["data"], "test");
 }
+
+#[tokio::test]
+async fn test_import_openapi_with_path_parameters() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    // Import OpenAPI spec with path parameters (like /update-plan/{request_hash})
+    let openapi_spec = json!({
+        "openapi": "3.0.0",
+        "info": {
+            "title": "Test API",
+            "version": "1.0.0"
+        },
+        "paths": {
+            "/update-plan/{request_hash}": {
+                "post": {
+                    "parameters": [
+                        {
+                            "name": "request_hash",
+                            "in": "path",
+                            "required": true,
+                            "schema": {
+                                "type": "string"
+                            }
+                        }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Success",
+                            "content": {
+                                "application/json": {
+                                    "example": {
+                                        "status": "updated",
+                                        "request_hash": "abc123"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "/users/{user_id}/posts/{post_id}": {
+                "get": {
+                    "parameters": [
+                        {
+                            "name": "user_id",
+                            "in": "path",
+                            "required": true,
+                            "schema": {
+                                "type": "string"
+                            }
+                        },
+                        {
+                            "name": "post_id",
+                            "in": "path",
+                            "required": true,
+                            "schema": {
+                                "type": "string"
+                            }
+                        }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Success",
+                            "content": {
+                                "application/json": {
+                                    "example": {
+                                        "user_id": "123",
+                                        "post_id": "456",
+                                        "title": "Test Post"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    let import_response = client
+        .post(format!("{}/__mock/import", BASE_URL))
+        .json(&json!({"openapi_spec": openapi_spec}))
+        .send()
+        .await
+        .expect("Failed to import OpenAPI spec");
+
+    assert!(import_response.status().is_success());
+    let body: serde_json::Value = import_response.json().await.expect("Failed to parse response");
+    assert_eq!(body["count"], 2);
+
+    // Test 1: Call endpoint with single path parameter
+    let response1 = client
+        .post(format!("{}/update-plan/abc123", BASE_URL))
+        .json(&json!({"some": "data"}))
+        .send()
+        .await
+        .expect("Failed to call endpoint with path parameter");
+
+    assert!(response1.status().is_success(), "Expected success but got: {}", response1.status());
+    let body1: serde_json::Value = response1.json().await.expect("Failed to parse response");
+    assert_eq!(body1["status"], "updated");
+    assert_eq!(body1["request_hash"], "abc123");
+
+    // Test 2: Call endpoint with different parameter value
+    let response2 = client
+        .post(format!("{}/update-plan/xyz789", BASE_URL))
+        .json(&json!({"some": "data"}))
+        .send()
+        .await
+        .expect("Failed to call endpoint with different path parameter");
+
+    assert!(response2.status().is_success());
+    let body2: serde_json::Value = response2.json().await.expect("Failed to parse response");
+    assert_eq!(body2["status"], "updated");
+
+    // Test 3: Call endpoint with multiple path parameters
+    let response3 = client
+        .get(format!("{}/users/123/posts/456", BASE_URL))
+        .send()
+        .await
+        .expect("Failed to call endpoint with multiple path parameters");
+
+    assert!(response3.status().is_success(), "Expected success but got: {}", response3.status());
+    let body3: serde_json::Value = response3.json().await.expect("Failed to parse response");
+    assert_eq!(body3["user_id"], "123");
+    assert_eq!(body3["post_id"], "456");
+    assert_eq!(body3["title"], "Test Post");
+
+    // Test 4: Verify that non-matching paths still return 404
+    let response4 = client
+        .get(format!("{}/users/123/comments/456", BASE_URL))  // Different path
+        .send()
+        .await
+        .expect("Failed to call non-existent endpoint");
+
+    assert_eq!(response4.status().as_u16(), 404);
+}
+
+#[tokio::test]
+async fn test_import_comprehensive_openapi_spec() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    // Load comprehensive test OpenAPI spec from file
+    let spec_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/openapi-test.json");
+    let spec_content = std::fs::read_to_string(&spec_path)
+        .expect("Failed to read openapi-test.json");
+    let openapi_spec: serde_json::Value = serde_json::from_str(&spec_content)
+        .expect("Failed to parse openapi-test.json");
+
+    // Import the comprehensive spec
+    let import_response = client
+        .post(format!("{}/__mock/import", BASE_URL))
+        .json(&json!({"openapi_spec": openapi_spec}))
+        .send()
+        .await
+        .expect("Failed to import comprehensive OpenAPI spec");
+
+    assert!(import_response.status().is_success());
+    let import_body: serde_json::Value = import_response.json().await.expect("Failed to parse import response");
+    println!("Imported {} endpoints", import_body["count"]);
+    assert!(import_body["count"].as_i64().unwrap() > 10, "Expected at least 10 endpoints");
+
+    // Test 1: Simple endpoint without parameters
+    let resp1 = client.get(format!("{}/api/health", BASE_URL)).send().await.unwrap();
+    assert!(resp1.status().is_success());
+    let body1: serde_json::Value = resp1.json().await.unwrap();
+    assert_eq!(body1["status"], "healthy");
+
+    // Test 2: Endpoint with single path parameter
+    let resp2 = client.get(format!("{}/api/users/42", BASE_URL)).send().await.unwrap();
+    assert!(resp2.status().is_success());
+    let body2: serde_json::Value = resp2.json().await.unwrap();
+    assert!(body2["id"].is_number() || body2["id"].is_string());
+
+    // Test 3: Endpoint with multiple path parameters
+    let resp3 = client.get(format!("{}/api/users/1/posts/5", BASE_URL)).send().await.unwrap();
+    assert!(resp3.status().is_success());
+    let body3: serde_json::Value = resp3.json().await.unwrap();
+    assert!(body3["id"].is_number() || body3["user_id"].is_number());
+
+    // Test 4: POST endpoint with 201 status
+    let resp4 = client
+        .post(format!("{}/api/users", BASE_URL))
+        .json(&json!({"name": "Test User", "email": "test@example.com"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp4.status().as_u16(), 201);
+    let body4: serde_json::Value = resp4.json().await.unwrap();
+    assert!(body4["id"].is_number() || body4["name"].is_string());
+
+    // Test 5: DELETE endpoint with 204 status
+    let resp5 = client.delete(format!("{}/api/users/999", BASE_URL)).send().await.unwrap();
+    assert_eq!(resp5.status().as_u16(), 204);
+
+    // Test 6: PUT endpoint
+    let resp6 = client
+        .put(format!("{}/api/users/123", BASE_URL))
+        .json(&json!({"name": "Updated Name"}))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp6.status().is_success());
+
+    // Test 7: PATCH endpoint with nested parameters
+    let resp7 = client
+        .patch(format!("{}/api/orders/order-123/items/item-456", BASE_URL))
+        .json(&json!({"quantity": 5}))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp7.status().is_success());
+    let body7: serde_json::Value = resp7.json().await.unwrap();
+    assert_eq!(body7["order_id"], "order-456");
+    assert_eq!(body7["item_id"], "item-789");
+
+    // Test 8: Verify export includes imported endpoints
+    let export_resp = client
+        .get(format!("{}/__mock/export", BASE_URL))
+        .send()
+        .await
+        .unwrap();
+    assert!(export_resp.status().is_success());
+    let exported: serde_json::Value = export_resp.json().await.unwrap();
+    assert_eq!(exported["openapi"], "3.0.0");
+    let paths = exported["paths"].as_object().unwrap();
+    println!("Exported paths count: {}", paths.len());
+    println!("Exported paths: {:?}", paths.keys().collect::<Vec<_>>());
+
+    // Should have at least some of the key paths
+    assert!(paths.len() >= 8, "Exported spec should contain imported endpoints, got {} paths", paths.len());
+    assert!(paths.contains_key("/api/health"));
+    assert!(paths.contains_key("/api/users/{user_id}"));
+    assert!(paths.contains_key("/api/users/{user_id}/posts/{post_id}"));
+}

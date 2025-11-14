@@ -116,6 +116,16 @@ fn extract_example_response_for_status(op: &Operation, status: u16) -> Option<Va
     None
 }
 
+fn matches_path_template(template: &str, actual_path: &str) -> bool {
+    // Convert OpenAPI path template to regex pattern
+    // e.g., "/update-plan/{request_hash}" -> "/update-plan/(?P<request_hash>[^/]+)"
+    let regex_pattern = template.replace('{', "(?P<").replace('}', ">[^/]+)");
+    match Regex::new(&format!("^{}$", regex_pattern)) {
+        Ok(re) => re.is_match(actual_path),
+        Err(_) => false,
+    }
+}
+
 pub async fn add_endpoint(data: web::Data<AppState>, cfg: web::Json<EndpointConfig>) -> impl Responder {
     let status = cfg.status.unwrap_or(200);
     let ep = DynamicEndpoint { response: cfg.response.clone(), status, headers: cfg.headers.clone() };
@@ -328,7 +338,26 @@ pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppSta
     let query = req.query_string().to_string();
     let body_json = serde_json::from_slice::<Value>(&body).ok();
     info!("Request {} {} headers={:?} query={} body={:?}", method, path, headers, query, body_json);
-    let response = if let Some(ep) = data.dynamic.lock().unwrap().get(&(method.clone(), path.clone())) {
+
+    // Try exact match first in dynamic endpoints
+    let mut matched_endpoint: Option<DynamicEndpoint> = None;
+    {
+        let dyn_map = data.dynamic.lock().unwrap();
+        if let Some(ep) = dyn_map.get(&(method.clone(), path.clone())) {
+            matched_endpoint = Some(ep.clone());
+        } else {
+            // Try path template matching for dynamic endpoints with parameters
+            for ((m, p), ep) in dyn_map.iter() {
+                if m == &method && matches_path_template(p, &path) {
+                    matched_endpoint = Some(ep.clone());
+                    info!("Matched path template: {} matches {}", p, path);
+                    break;
+                }
+            }
+        }
+    }
+
+    let response = if let Some(ep) = matched_endpoint {
         HttpResponse::build(actix_web::http::StatusCode::from_u16(ep.status).unwrap()).json(&ep.response)
     } else if let Some(spec) = &data.spec {
         if let Some(op) = get_operation(spec, &method, &path) {
