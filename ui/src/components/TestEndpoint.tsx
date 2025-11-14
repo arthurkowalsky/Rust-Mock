@@ -30,12 +30,13 @@ interface TestEndpointProps {
 const TestEndpoint: React.FC<TestEndpointProps> = ({ initialEndpoint }) => {
   const [method, setMethod] = useState<HttpMethod>(initialEndpoint?.method || "GET");
   const [url, setUrl] = useState(initialEndpoint?.path || "");
+  const [pathParams, setPathParams] = useState<Record<string, string>>({});
   const [headerPairs, setHeaderPairs] = useState<KeyValuePair[]>([]);
   const [requestBody, setRequestBody] = useState<any>(initialEndpoint?.response || {});
   const [isTesting, setIsTesting] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [copied, setCopied] = useState(false);
-  
+
   // Response state
   const [response, setResponse] = useState<{
     status: number;
@@ -43,6 +44,34 @@ const TestEndpoint: React.FC<TestEndpointProps> = ({ initialEndpoint }) => {
     headers: Record<string, string>;
     data: any;
   } | null>(null);
+
+  // Extract path parameters from URL template
+  const extractPathParams = (pathTemplate: string): string[] => {
+    const matches = pathTemplate.match(/\{([^}]+)\}/g);
+    return matches ? matches.map(m => m.slice(1, -1)) : [];
+  };
+
+  // Build final URL by replacing parameters
+  const buildFinalUrl = (template: string, params: Record<string, string>): string => {
+    let finalUrl = template;
+    Object.entries(params).forEach(([key, value]) => {
+      finalUrl = finalUrl.replace(`{${key}}`, value || `{${key}}`);
+    });
+    return finalUrl;
+  };
+
+  // Get current path parameters
+  const currentPathParams = extractPathParams(url);
+
+  // Initialize path param values when URL changes
+  useEffect(() => {
+    const params = extractPathParams(url);
+    const newPathParams: Record<string, string> = {};
+    params.forEach(param => {
+      newPathParams[param] = pathParams[param] || '';
+    });
+    setPathParams(newPathParams);
+  }, [url]);
 
   // Load test history on component mount
   useEffect(() => {
@@ -98,9 +127,12 @@ const TestEndpoint: React.FC<TestEndpointProps> = ({ initialEndpoint }) => {
       
       // Get headers object from key-value pairs
       const headers = getHeadersObject();
-      
+
+      // Build final URL by replacing path parameters
+      const finalUrl = buildFinalUrl(url, pathParams);
+
       // Make the test request
-      const result = await testEndpoint(method, url, headers, method !== "GET" ? requestBody : undefined);
+      const result = await testEndpoint(method, finalUrl, headers, method !== "GET" ? requestBody : undefined);
       
       // Update the response state
       setResponse(result);
@@ -194,6 +226,31 @@ const TestEndpoint: React.FC<TestEndpointProps> = ({ initialEndpoint }) => {
               </Button>
             </div>
           </div>
+
+          {/* Path Parameters Section */}
+          {currentPathParams.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <Label className="text-sm font-medium text-blue-900 mb-3 block">
+                Path Parameters
+              </Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {currentPathParams.map((param) => (
+                  <div key={param}>
+                    <Label htmlFor={`param-${param}`} className="text-xs text-gray-600 mb-1">
+                      {param}
+                    </Label>
+                    <Input
+                      id={`param-${param}`}
+                      value={pathParams[param] || ''}
+                      onChange={(e) => setPathParams({ ...pathParams, [param]: e.target.value })}
+                      placeholder={`Value for ${param}`}
+                      className="bg-white"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Request Tabs - Headers & Body */}
           <Tabs defaultValue="body">

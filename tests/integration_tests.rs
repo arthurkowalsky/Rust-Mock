@@ -585,10 +585,10 @@ async fn test_request_body_and_query_params_in_logs() {
     // Verify query params
     assert_eq!(log["query"], "key=value&foo=bar");
 
-    // Verify request body
-    assert_eq!(log["body"]["name"], "Test User");
-    assert_eq!(log["body"]["email"], "test@example.com");
-    assert_eq!(log["body"]["age"], 25);
+    // Verify request body (using new field name)
+    assert_eq!(log["request_body"]["name"], "Test User");
+    assert_eq!(log["request_body"]["email"], "test@example.com");
+    assert_eq!(log["request_body"]["age"], 25);
 }
 
 #[tokio::test]

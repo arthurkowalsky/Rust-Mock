@@ -226,60 +226,145 @@ const LogTable: React.FC<LogTableProps> = ({ logs, onRefresh }) => {
         open={!!detailsLog}
         onOpenChange={(open) => !open && setDetailsLog(null)}
       >
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-auto">
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-auto">
           <DialogHeader>
-            <DialogTitle>
-              {detailsLog?.method} {detailsLog?.path}
+            <DialogTitle className="flex items-center gap-3">
+              <span
+                className={`px-2 py-1 rounded text-xs font-medium ${
+                  detailsLog && detailsLog.status >= 200 && detailsLog.status < 300
+                    ? "bg-green-100 text-green-800"
+                    : detailsLog && detailsLog.status >= 400 && detailsLog.status < 500
+                    ? "bg-yellow-100 text-yellow-800"
+                    : "bg-red-100 text-red-800"
+                }`}
+              >
+                {detailsLog?.status}
+              </span>
+              <span>{detailsLog?.method} {detailsLog?.path}</span>
             </DialogTitle>
           </DialogHeader>
 
           {detailsLog && (
             <div className="space-y-4 mt-4">
-              <div className="grid grid-cols-2 gap-4">
+              {/* Metadata Row */}
+              <div className="grid grid-cols-2 gap-4 pb-4 border-b">
                 <div>
-                  <h3 className="text-sm font-medium mb-2">Timestamp</h3>
-                  <div className="bg-gray-100 p-2 rounded">
-                    {formatTimestamp(detailsLog.timestamp)}
-                  </div>
+                  <h3 className="text-xs font-medium text-gray-500 mb-1">Timestamp</h3>
+                  <div className="text-sm">{formatTimestamp(detailsLog.timestamp)}</div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-medium mb-2">Status</h3>
-                  <div className="bg-gray-100 p-2 rounded">{detailsLog.status}</div>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-medium mb-2">Headers</h3>
-                <div className="bg-gray-100 p-2 rounded font-mono text-sm max-h-40 overflow-auto">
-                  {Object.entries(detailsLog.headers).map(([key, value]) => (
-                    <div key={key}>
-                      <span className="text-purple-600">{key}</span>:{" "}
-                      <span>{value}</span>
+                {detailsLog.matched_endpoint && (
+                  <div>
+                    <h3 className="text-xs font-medium text-gray-500 mb-1">Matched Endpoint</h3>
+                    <div className="text-sm font-mono bg-blue-50 px-2 py-1 rounded inline-block">
+                      {detailsLog.matched_endpoint}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
               </div>
 
-              {detailsLog.query && Object.keys(detailsLog.query).length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium mb-2">Query Parameters</h3>
-                  <div className="bg-gray-100 p-2 rounded font-mono text-sm">
-                    {Object.entries(detailsLog.query).map(([key, value]) => (
-                      <div key={key}>
-                        <span className="text-blue-600">{key}</span>:{" "}
-                        <span>{value}</span>
+              {/* Request/Response Split View */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* REQUEST COLUMN */}
+                <div className="space-y-4 border-r pr-4">
+                  <h2 className="text-lg font-semibold text-blue-600">📨 Request</h2>
+
+                  {/* Request Headers */}
+                  <div>
+                    <h3 className="text-sm font-medium mb-2">Headers</h3>
+                    <div className="bg-gray-50 p-3 rounded font-mono text-xs max-h-40 overflow-auto border">
+                      {Object.keys(detailsLog.request_headers).length > 0 ? (
+                        Object.entries(detailsLog.request_headers).map(([key, value]) => (
+                          <div key={key} className="mb-1">
+                            <span className="text-purple-600 font-medium">{key}</span>:{" "}
+                            <span className="text-gray-700">{value}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-gray-500">No headers</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Query Parameters */}
+                  {detailsLog.query && (
+                    <div>
+                      <h3 className="text-sm font-medium mb-2">Query String</h3>
+                      <div className="bg-gray-50 p-3 rounded font-mono text-xs border">
+                        {detailsLog.query || <span className="text-gray-500">No query parameters</span>}
                       </div>
-                    ))}
+                    </div>
+                  )}
+
+                  {/* Request Body */}
+                  <div>
+                    <h3 className="text-sm font-medium mb-2">Body</h3>
+                    {detailsLog.request_body ? (
+                      <JsonEditor value={detailsLog.request_body} onChange={() => {}} />
+                    ) : (
+                      <div className="bg-gray-50 p-3 rounded text-xs text-gray-500 border">
+                        No request body
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
 
-              {detailsLog.body && (
-                <div>
-                  <h3 className="text-sm font-medium mb-2">Request Body</h3>
-                  <JsonEditor value={detailsLog.body} onChange={() => {}} />
+                {/* RESPONSE COLUMN */}
+                <div className="space-y-4 pl-4">
+                  <h2 className="text-lg font-semibold text-green-600">📤 Response</h2>
+
+                  {/* Response Status */}
+                  <div>
+                    <h3 className="text-sm font-medium mb-2">Status Code</h3>
+                    <div className="bg-gray-50 p-3 rounded border">
+                      <span
+                        className={`px-3 py-1 rounded text-sm font-medium ${
+                          detailsLog.status >= 200 && detailsLog.status < 300
+                            ? "bg-green-100 text-green-800"
+                            : detailsLog.status >= 400 && detailsLog.status < 500
+                            ? "bg-yellow-100 text-yellow-800"
+                            : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        {detailsLog.status} {
+                          detailsLog.status === 200 ? "OK" :
+                          detailsLog.status === 201 ? "Created" :
+                          detailsLog.status === 204 ? "No Content" :
+                          detailsLog.status === 404 ? "Not Found" : ""
+                        }
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Response Headers */}
+                  <div>
+                    <h3 className="text-sm font-medium mb-2">Headers</h3>
+                    <div className="bg-gray-50 p-3 rounded font-mono text-xs max-h-40 overflow-auto border">
+                      {Object.keys(detailsLog.response_headers).length > 0 ? (
+                        Object.entries(detailsLog.response_headers).map(([key, value]) => (
+                          <div key={key} className="mb-1">
+                            <span className="text-green-600 font-medium">{key}</span>:{" "}
+                            <span className="text-gray-700">{value}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-gray-500">No headers</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Response Body */}
+                  <div>
+                    <h3 className="text-sm font-medium mb-2">Body</h3>
+                    {detailsLog.response_body ? (
+                      <JsonEditor value={detailsLog.response_body} onChange={() => {}} />
+                    ) : (
+                      <div className="bg-gray-50 p-3 rounded text-xs text-gray-500 border">
+                        No response body
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
           )}
         </DialogContent>

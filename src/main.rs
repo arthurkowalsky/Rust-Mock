@@ -12,13 +12,21 @@ use std::{collections::{HashMap, HashSet}, env, fs, sync::Mutex};
 
 #[derive(Serialize, Clone)]
 pub struct RequestLog {
+    // Request data
     pub method: String,
     pub path: String,
-    pub headers: HashMap<String, String>,
+    pub request_headers: HashMap<String, String>,
     pub query: String,
-    pub body: Option<Value>,
-    pub timestamp: String,
+    pub request_body: Option<Value>,
+
+    // Response data
     pub status: u16,
+    pub response_body: Option<Value>,
+    pub response_headers: HashMap<String, String>,
+
+    // Metadata
+    pub timestamp: String,
+    pub matched_endpoint: Option<String>,
 }
 
 #[derive(Clone)]
@@ -334,22 +342,25 @@ pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppSta
     let method = req.method().as_str().to_uppercase();
     let path = req.path().to_string();
     let timestamp = Local::now().to_rfc3339();
-    let headers = req.headers().iter().map(|(k,v)| (k.to_string(), v.to_str().unwrap_or("").to_string())).collect::<HashMap<_,_>>();
+    let request_headers = req.headers().iter().map(|(k,v)| (k.to_string(), v.to_str().unwrap_or("").to_string())).collect::<HashMap<_,_>>();
     let query = req.query_string().to_string();
-    let body_json = serde_json::from_slice::<Value>(&body).ok();
-    info!("Request {} {} headers={:?} query={} body={:?}", method, path, headers, query, body_json);
+    let request_body = serde_json::from_slice::<Value>(&body).ok();
+    info!("Request {} {} headers={:?} query={} body={:?}", method, path, request_headers, query, request_body);
 
     // Try exact match first in dynamic endpoints
     let mut matched_endpoint: Option<DynamicEndpoint> = None;
+    let mut matched_pattern: Option<String> = None;
     {
         let dyn_map = data.dynamic.lock().unwrap();
         if let Some(ep) = dyn_map.get(&(method.clone(), path.clone())) {
             matched_endpoint = Some(ep.clone());
+            matched_pattern = Some(path.clone());
         } else {
             // Try path template matching for dynamic endpoints with parameters
             for ((m, p), ep) in dyn_map.iter() {
                 if m == &method && matches_path_template(p, &path) {
                     matched_endpoint = Some(ep.clone());
+                    matched_pattern = Some(format!("{} (template)", p));
                     info!("Matched path template: {} matches {}", p, path);
                     break;
                 }
@@ -357,24 +368,59 @@ pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppSta
         }
     }
 
+    // Capture response data for logging
+    let mut response_body: Option<Value> = None;
+    let mut response_headers = HashMap::new();
+    let status: u16;
+
     let response = if let Some(ep) = matched_endpoint {
+        status = ep.status;
+        response_body = Some(ep.response.clone());
+
+        // Add custom headers if present
+        if let Some(custom_headers) = &ep.headers {
+            response_headers.extend(custom_headers.clone());
+        }
+        response_headers.insert("content-type".to_string(), "application/json".to_string());
+
         HttpResponse::build(actix_web::http::StatusCode::from_u16(ep.status).unwrap()).json(&ep.response)
     } else if let Some(spec) = &data.spec {
         if let Some(op) = get_operation(spec, &method, &path) {
             if let Some(example) = extract_example_response(&op) {
+                status = 200;
+                response_body = Some(example.clone());
+                response_headers.insert("content-type".to_string(), "application/json".to_string());
+                matched_pattern = Some("OpenAPI spec".to_string());
                 HttpResponse::Ok().content_type("application/json").body(example.to_string())
             } else {
+                status = 200;
                 HttpResponse::Ok().finish()
             }
         } else {
+            status = 404;
             HttpResponse::NotFound().finish()
         }
     } else {
+        status = 404;
         HttpResponse::NotFound().finish()
     };
-    let status = response.status().as_u16();
+
     info!("Responded {} {} -> {}", method, path, status);
-    data.logs.lock().unwrap().push(RequestLog { method, path, headers, query, body: body_json, timestamp, status });
+
+    // Log with full request and response data
+    data.logs.lock().unwrap().push(RequestLog {
+        method,
+        path,
+        request_headers,
+        query,
+        request_body,
+        status,
+        response_body,
+        response_headers,
+        timestamp,
+        matched_endpoint: matched_pattern,
+    });
+
     response
 }
 
