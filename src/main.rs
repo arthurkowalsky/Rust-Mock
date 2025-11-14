@@ -34,6 +34,7 @@ pub struct DynamicEndpoint {
     pub response: Value,
     pub status: u16,
     pub headers: Option<HashMap<String, String>>,
+    pub proxy_url: Option<String>,
 }
 
 pub struct AppState {
@@ -42,6 +43,7 @@ pub struct AppState {
     pub spec: Option<OpenAPI>,
     pub raw_spec: Option<Value>,
     pub logs: Mutex<Vec<RequestLog>>,
+    pub default_proxy_url: Option<String>,
 }
 
 #[derive(Parser)]
@@ -50,6 +52,8 @@ struct Config {
     host: String,
     #[clap(long, default_value = "8090")]
     port: u16,
+    #[clap(long, env = "DEFAULT_PROXY_URL")]
+    default_proxy_url: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -59,6 +63,7 @@ pub struct EndpointConfig {
     pub response: Value,
     pub status: Option<u16>,
     pub headers: Option<HashMap<String, String>>,
+    pub proxy_url: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -136,7 +141,12 @@ fn matches_path_template(template: &str, actual_path: &str) -> bool {
 
 pub async fn add_endpoint(data: web::Data<AppState>, cfg: web::Json<EndpointConfig>) -> impl Responder {
     let status = cfg.status.unwrap_or(200);
-    let ep = DynamicEndpoint { response: cfg.response.clone(), status, headers: cfg.headers.clone() };
+    let ep = DynamicEndpoint {
+        response: cfg.response.clone(),
+        status,
+        headers: cfg.headers.clone(),
+        proxy_url: cfg.proxy_url.clone(),
+    };
     data.dynamic.lock().unwrap().insert((cfg.method.clone(), cfg.path.clone()), ep);
     info!("Added endpoint {} {}", cfg.method, cfg.path);
     HttpResponse::Ok().json(json!({"added": true}))
@@ -247,6 +257,7 @@ pub async fn import_openapi(data: web::Data<AppState>, req: web::Json<ImportRequ
                         headers: Some(HashMap::from([
                             ("Content-Type".to_string(), "application/json".to_string()),
                         ])),
+                        proxy_url: None,
                     };
 
                     dyn_map.insert((method.to_string(), path.clone()), endpoint.clone());
