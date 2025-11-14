@@ -446,11 +446,20 @@ async fn forward_to_proxy(
         }
     }
 
-    // Try to parse response body as JSON, fallback to raw text
-    let response_body = if let Ok(json_body) = response.json::<Value>().await {
-        Some(json_body)
-    } else {
+    // Handle response body - some status codes don't have content
+    let response_body = if status == 204 || status == 304 {
+        // 204 No Content and 304 Not Modified don't have response bodies
         None
+    } else {
+        // Try to get response bytes first
+        match response.bytes().await {
+            Ok(bytes) if bytes.is_empty() => None,
+            Ok(bytes) => {
+                // Try to parse as JSON
+                serde_json::from_slice::<Value>(&bytes).ok()
+            }
+            Err(_) => None,
+        }
     };
 
     Ok((status, response_body, response_headers))
