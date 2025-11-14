@@ -23,6 +23,7 @@ RustMock is an elegant, high-performance mock server designed for developers who
 - **💻 Beautiful UI Dashboard**: Sleek React interface for managing all aspects of your mock server
 - **🔍 Comprehensive Request Logging**: Monitor and inspect all incoming requests
 - **📝 OpenAPI Support**: Automatically create mock endpoints from your OpenAPI spec
+- **📥 OpenAPI Import/Export**: Import endpoints from OpenAPI specifications and export your configuration to OpenAPI 3.0 format
 - **🧪 Built-in API Testing**: Test your endpoints directly from the dashboard
 - **🐳 Docker Ready**: Get started in seconds with pre-built Docker images
 
@@ -122,6 +123,8 @@ RustMock provides several admin endpoints to configure the mock server:
 | `/__mock/endpoints` | DELETE | Remove an endpoint |
 | `/__mock/logs` | GET | Get request logs |
 | `/__mock/logs` | DELETE | Clear logs |
+| `/__mock/import` | POST | Import endpoints from OpenAPI specification |
+| `/__mock/export` | GET | Export endpoints as OpenAPI 3.0 specification |
 
 ### Adding a Mock Endpoint
 
@@ -144,6 +147,106 @@ Content-Type: application/json
   }
 }
 ```
+
+### Importing from OpenAPI Specification
+
+Import endpoints from an OpenAPI 3.0 specification file:
+
+```http
+POST /__mock/import
+Content-Type: application/json
+
+{
+  "openapi_spec": {
+    "openapi": "3.0.0",
+    "info": {
+      "title": "My API",
+      "version": "1.0.0"
+    },
+    "paths": {
+      "/api/users": {
+        "get": {
+          "summary": "Get users",
+          "responses": {
+            "200": {
+              "description": "Success",
+              "content": {
+                "application/json": {
+                  "example": [{"id": 1, "name": "John"}]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "imported": true,
+  "count": 1,
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/users",
+      "status": 200
+    }
+  ]
+}
+```
+
+### Exporting to OpenAPI Specification
+
+Export all configured endpoints as an OpenAPI 3.0 specification:
+
+```http
+GET /__mock/export
+```
+
+**Response:**
+```json
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Mock API",
+    "description": "Exported from Rust-Mock server",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/users": {
+      "get": {
+        "summary": "GET /api/users",
+        "operationId": "get_api_users",
+        "responses": {
+          "200": {
+            "description": "Successful response with status 200",
+            "content": {
+              "application/json": {
+                "example": [{"id": 1, "name": "John"}],
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### Using the Dashboard for Import/Export
+
+The React dashboard provides intuitive buttons for importing and exporting OpenAPI specifications:
+
+1. **Import OpenAPI**: Click the "Import OpenAPI" button and select your OpenAPI JSON file
+2. **Export OpenAPI**: Click the "Export OpenAPI" button to download your endpoints as an OpenAPI 3.0 specification
+3. **Export JSON**: Click the "Export JSON" button to download endpoints in the internal format
 
 ## 🏗️ Architecture
 

@@ -10,14 +10,21 @@ export interface Endpoint {
 }
 
 export interface RequestLog {
-  timestamp: string;
+  // Request data
   method: HttpMethod;
   path: string;
+  request_headers: Record<string, string>;
+  query: string;
+  request_body?: any;
+
+  // Response data
   status: number;
-  headers: Record<string, string>;
-  query?: Record<string, string>;
-  body?: any;
-  duration?: number;
+  response_body?: any;
+  response_headers: Record<string, string>;
+
+  // Metadata
+  timestamp: string;
+  matched_endpoint?: string;
 }
 
 export interface EndpointResponse {
