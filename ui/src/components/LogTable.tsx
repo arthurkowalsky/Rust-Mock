@@ -11,13 +11,14 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Eye, Trash2, RefreshCw } from "lucide-react";
+import { Eye, Trash2, RefreshCw, ArrowRightLeft } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -163,6 +164,7 @@ const LogTable: React.FC<LogTableProps> = ({ logs, onRefresh }) => {
               <TableHead className="w-40">Timestamp</TableHead>
               <TableHead className="w-24">Method</TableHead>
               <TableHead>Path</TableHead>
+              <TableHead className="w-32">Source</TableHead>
               <TableHead className="w-24">Status</TableHead>
               <TableHead className="text-right w-20">Actions</TableHead>
             </TableRow>
@@ -183,6 +185,18 @@ const LogTable: React.FC<LogTableProps> = ({ logs, onRefresh }) => {
                   </TableCell>
                   <TableCell className="font-mono text-sm truncate max-w-[300px]">
                     {log.path}
+                  </TableCell>
+                  <TableCell>
+                    {log.proxied_to ? (
+                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 flex items-center gap-1 w-fit">
+                        <ArrowRightLeft className="w-3 h-3" />
+                        Proxied
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                        Mock
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     <span
@@ -212,7 +226,7 @@ const LogTable: React.FC<LogTableProps> = ({ logs, onRefresh }) => {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                <TableCell colSpan={6} className="text-center py-8 text-gray-500">
                   No logs found
                 </TableCell>
               </TableRow>
@@ -247,7 +261,7 @@ const LogTable: React.FC<LogTableProps> = ({ logs, onRefresh }) => {
           {detailsLog && (
             <div className="space-y-4 mt-4">
               {/* Metadata Row */}
-              <div className="grid grid-cols-2 gap-4 pb-4 border-b">
+              <div className="grid grid-cols-3 gap-4 pb-4 border-b">
                 <div>
                   <h3 className="text-xs font-medium text-gray-500 mb-1">Timestamp</h3>
                   <div className="text-sm">{formatTimestamp(detailsLog.timestamp)}</div>
@@ -257,6 +271,14 @@ const LogTable: React.FC<LogTableProps> = ({ logs, onRefresh }) => {
                     <h3 className="text-xs font-medium text-gray-500 mb-1">Matched Endpoint</h3>
                     <div className="text-sm font-mono bg-blue-50 px-2 py-1 rounded inline-block">
                       {detailsLog.matched_endpoint}
+                    </div>
+                  </div>
+                )}
+                {detailsLog.proxied_to && (
+                  <div>
+                    <h3 className="text-xs font-medium text-gray-500 mb-1">Proxied To</h3>
+                    <div className="text-xs font-mono bg-purple-50 px-2 py-1 rounded break-all">
+                      {detailsLog.proxied_to}
                     </div>
                   </div>
                 )}
