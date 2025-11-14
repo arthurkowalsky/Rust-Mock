@@ -49,12 +49,14 @@ RustMock is an elegant, high-performance mock server designed for developers who
 docker run -p 8090:8090 ghcr.io/arthurkowalsky/rust-mock:latest
 
 # Run with OpenAPI specification from current directory
+# Endpoints from the spec will be automatically imported on startup
 docker run -p 8090:8090 \
   -v $(pwd)/openapi.json:/app/openapi.json \
   -e OPENAPI_FILE=/app/openapi.json \
   ghcr.io/arthurkowalsky/rust-mock:latest
 
 # Run with OpenAPI specification from specific directory (change /path/to as needed)
+# Endpoints will be available immediately via the import functionality
 docker run -p 8090:8090 \
   -v /path/to/openapi.json:/app/openapi.json \
   -e OPENAPI_FILE=/app/openapi.json \
@@ -73,6 +75,7 @@ services:
     volumes:
       - ./openapi.json:/app/openapi.json
     environment:
+      # Automatically import endpoints from OpenAPI spec on startup
       - OPENAPI_FILE=/app/openapi.json
 ```
 
@@ -110,7 +113,7 @@ RustMock comes pre-configured with sensible defaults (host: 0.0.0.0, port: 8090)
 
 ### Environment Variables
 
-- `OPENAPI_FILE`: Path to your OpenAPI specification file (optional)
+- `OPENAPI_FILE`: Path to your OpenAPI specification file (optional). When set, endpoints from the OpenAPI spec will be automatically imported on startup as dynamic endpoints.
 
 ## 📡 API Reference
 
