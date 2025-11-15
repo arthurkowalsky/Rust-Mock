@@ -205,8 +205,22 @@ export const testEndpoint = async (
     // Get response data
     let data;
     const contentType = response.headers.get("content-type");
-    if (contentType?.includes("application/json")) {
-      data = await response.json();
+
+    // Check if response has content
+    const contentLength = response.headers.get("content-length");
+    const hasContent = response.status !== 204 &&
+                      response.status !== 304 &&
+                      contentLength !== "0";
+
+    if (!hasContent) {
+      data = null;
+    } else if (contentType?.includes("application/json")) {
+      try {
+        data = await response.json();
+      } catch (e) {
+        // If JSON parsing fails, try to get as text
+        data = await response.text();
+      }
     } else {
       data = await response.text();
     }

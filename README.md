@@ -120,6 +120,7 @@ RustMock supports configuration via CLI arguments and environment variables:
 ```
 
 **Available Options:**
+
 | Argument | Default | Description |
 |----------|---------|-------------|
 | `--host` | `0.0.0.0` | Server host address |

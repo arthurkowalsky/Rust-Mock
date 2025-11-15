@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +17,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { Endpoint, HttpMethod, KeyValuePair } from "@/types";
-import { addEndpoint, testEndpoint } from "@/utils/api";
+import { addEndpoint, testEndpoint, getProxyConfig } from "@/utils/api";
 import JsonEditor from "./JsonEditor";
 import KeyValueEditor from "./KeyValueEditor";
 import { toast } from "sonner";
@@ -41,6 +41,27 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
   const [headerPairs, setHeaderPairs] = useState<KeyValuePair[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isValidPath, setIsValidPath] = useState(true);
+  const [defaultProxyUrl, setDefaultProxyUrl] = useState<string | null>(null);
+
+  // Load default proxy config on mount
+  useEffect(() => {
+    const loadProxyConfig = async () => {
+      try {
+        const config = await getProxyConfig();
+        if (config && config.enabled && config.proxy_url) {
+          setDefaultProxyUrl(config.proxy_url);
+          // Pre-fill the proxy_url field with the default proxy
+          setEndpoint((prev) => ({
+            ...prev,
+            proxy_url: config.proxy_url,
+          }));
+        }
+      } catch (error) {
+        console.error("Failed to load proxy config:", error);
+      }
+    };
+    loadProxyConfig();
+  }, []);
 
   // Validate path format
   const validatePath = (path: string): boolean => {
@@ -223,8 +244,16 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
                     id="proxy_url"
                     value={endpoint.proxy_url || ""}
                     onChange={(e) => handleChange("proxy_url", e.target.value)}
-                    placeholder="https://api.example.com"
+                    placeholder={defaultProxyUrl || "https://api.example.com"}
                   />
+                  {defaultProxyUrl && endpoint.proxy_url === defaultProxyUrl && (
+                    <p className="text-sm text-purple-600 flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Using default proxy from Settings
+                    </p>
+                  )}
                   <p className="text-sm text-muted-foreground">
                     If set, requests to this endpoint will be forwarded to the specified URL instead of returning the mock response.
                   </p>
@@ -237,6 +266,9 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
                     <li>• Set a URL to proxy requests to a real API</li>
                     <li>• Headers, query params, and body are forwarded automatically</li>
                     <li>• Useful for testing new endpoints while keeping production data</li>
+                    {defaultProxyUrl && (
+                      <li className="text-purple-700 font-medium">• Default proxy is pre-filled (clear it to use mock response)</li>
+                    )}
                   </ul>
                 </div>
               </div>
