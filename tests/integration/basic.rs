@@ -219,3 +219,44 @@ async fn test_empty_response_body() {
     let resp = client.delete(format!("{}/item/123", BASE_URL)).send().await.unwrap();
     assert_eq!(resp.status().as_u16(), 204);
 }
+
+#[tokio::test]
+async fn test_path_parameters_in_mock_endpoint() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    let payload = json!({
+        "method": "GET",
+        "path": "/users/{user_id}",
+        "response": {"id": 123, "name": "Test User"},
+        "status": 200
+    });
+
+    client
+        .post(format!("{}/__mock/endpoints", BASE_URL))
+        .json(&payload)
+        .send()
+        .await
+        .expect("Failed to add endpoint");
+
+    let response = client
+        .get(format!("{}/users/42", BASE_URL))
+        .send()
+        .await
+        .expect("Failed to call endpoint");
+
+    assert!(response.status().is_success());
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(body["id"], 123);
+    assert_eq!(body["name"], "Test User");
+
+    let response2 = client
+        .get(format!("{}/users/999", BASE_URL))
+        .send()
+        .await
+        .expect("Failed to call endpoint");
+
+    assert!(response2.status().is_success());
+    let body2: serde_json::Value = response2.json().await.unwrap();
+    assert_eq!(body2["id"], 123);
+}

@@ -302,3 +302,31 @@ async fn test_proxy_failure_returns_502() {
     let body: serde_json::Value = resp.json().await.unwrap();
     assert!(body["error"].as_str().unwrap().contains("Proxy request failed"));
 }
+
+#[tokio::test]
+async fn test_proxy_does_not_forward_accept_encoding() {
+    let _server = TestServer::start().await;
+    let client = reqwest::Client::new();
+
+    client
+        .post(format!("{}/__mock/proxy", BASE_URL))
+        .json(&json!({"url": "https://httpbin.org"}))
+        .send()
+        .await
+        .unwrap();
+
+    let resp = client
+        .get(format!("{}/headers", BASE_URL))
+        .header("accept-encoding", "gzip, deflate, br, zstd")
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status().as_u16(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+
+    let headers = body["headers"].as_object().unwrap();
+    assert!(headers.get("Accept-Encoding").is_none() ||
+            !headers.get("Accept-Encoding").unwrap().as_str().unwrap().contains("zstd"),
+            "accept-encoding should not be forwarded to upstream");
+}
