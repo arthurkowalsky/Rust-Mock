@@ -210,13 +210,13 @@ export const testEndpoint = async (
     if (response.status === 204 || response.status === 304) {
       data = null;
     } else if (contentType?.includes("application/json")) {
+      const text = await response.text();
       try {
-        const text = await response.text();
-        // Only try to parse if there's actual content
+        // Try to parse as JSON
         data = text.trim() ? JSON.parse(text) : null;
       } catch (e) {
-        // If JSON parsing fails, return the text
-        data = await response.text();
+        // If JSON parsing fails, return the text we already read
+        data = text;
       }
     } else {
       data = await response.text();
