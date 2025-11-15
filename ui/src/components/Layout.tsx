@@ -1,8 +1,9 @@
 
 import React, { useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import { Button } from "@/components/ui/button";
-import { Settings } from "lucide-react";
+import { Settings as SettingsIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,11 +18,12 @@ import { getServerConfig, saveServerConfig } from "@/utils/api";
 
 interface LayoutProps {
   children: React.ReactNode;
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
+  activeTab?: string;
+  setActiveTab?: (tab: string) => void;
 }
 
 const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab }) => {
+  const location = useLocation();
   const [serverConfig, setServerConfig] = useState(getServerConfig());
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -44,12 +46,24 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab }) =>
             <span className="opacity-70 mr-1">Server:</span>
             <span>{serverConfig.host}:{serverConfig.port}</span>
           </div>
-          
-          {/* Settings Dialog */}
+
+          {/* Settings Link */}
+          <Link to="/settings">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:bg-white/10"
+              title="Settings"
+            >
+              <SettingsIcon className="h-5 w-5" />
+            </Button>
+          </Link>
+
+          {/* Server Config Dialog (old settings) */}
           <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
             <DialogTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-white hover:bg-white/10">
-                <Settings className="h-5 w-5" />
+              <Button variant="ghost" className="text-white hover:bg-white/10 text-xs">
+                Server Config
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -87,8 +101,10 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab }) =>
 
       {/* Main content */}
       <div className="flex-1 flex">
-        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-        <main className="flex-1 overflow-auto p-6 bg-gray-50">
+        {activeTab && setActiveTab && (
+          <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+        )}
+        <main className={`flex-1 overflow-auto p-6 bg-gray-50 ${!activeTab ? 'w-full' : ''}`}>
           {children}
         </main>
       </div>

@@ -159,7 +159,6 @@ const Index = () => {
                 setActiveTab("endpoints");
                 toast.success("Endpoint added successfully");
               }}
-              onTest={handleTestEndpoint}
             />
           </div>
         );

@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +17,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { Endpoint, HttpMethod, KeyValuePair } from "@/types";
-import { addEndpoint, testEndpoint } from "@/utils/api";
+import { addEndpoint, getProxyConfig } from "@/utils/api";
 import JsonEditor from "./JsonEditor";
 import KeyValueEditor from "./KeyValueEditor";
 import { toast } from "sonner";
@@ -28,32 +28,44 @@ const DEFAULT_ENDPOINT: Endpoint = {
   response: {},
   status: 200,
   headers: {},
+  proxy_url: undefined,
 };
 
 interface AddEndpointFormProps {
   onSuccess: () => void;
-  onTest: (endpoint: Endpoint) => void;
 }
 
-const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) => {
+const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess }) => {
   const [endpoint, setEndpoint] = useState<Endpoint>({ ...DEFAULT_ENDPOINT });
   const [headerPairs, setHeaderPairs] = useState<KeyValuePair[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isValidPath, setIsValidPath] = useState(true);
+  const [defaultProxyUrl, setDefaultProxyUrl] = useState<string | null>(null);
 
-  // Validate path format
+  useEffect(() => {
+    const loadProxyConfig = async () => {
+      try {
+        const config = await getProxyConfig();
+        if (config && config.enabled && config.proxy_url) {
+          setDefaultProxyUrl(config.proxy_url);
+        }
+      } catch (error) {
+        console.error("Failed to load proxy config:", error);
+      }
+    };
+    loadProxyConfig();
+  }, []);
+
   const validatePath = (path: string): boolean => {
-    // Check if path starts with '/'
     return path.startsWith("/");
   };
 
-  // Handle change in form fields
   const handleChange = (
     field: keyof Endpoint,
     value: string | number | object
   ) => {
     const updatedEndpoint = { ...endpoint };
-    
+
     if (field === "path") {
       const pathString = value as string;
       setIsValidPath(validatePath(pathString));
@@ -64,16 +76,17 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
       updatedEndpoint[field] = Number(value);
     } else if (field === "response") {
       updatedEndpoint[field] = value;
+    } else if (field === "proxy_url") {
+      const proxyUrl = value as string;
+      updatedEndpoint[field] = proxyUrl.trim() === "" ? undefined : proxyUrl.trim();
     }
-    
+
     setEndpoint(updatedEndpoint);
   };
 
-  // Handle headers change
   const handleHeadersChange = (pairs: KeyValuePair[]) => {
     setHeaderPairs(pairs);
     
-    // Convert key-value pairs to a headers object
     const headersObj: Record<string, string> = {};
     pairs.forEach((pair) => {
       if (pair.key && pair.key.trim()) {
@@ -87,7 +100,6 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
     }));
   };
 
-  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -111,16 +123,6 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  // Handle testing the endpoint
-  const handleTest = () => {
-    if (!isValidPath) {
-      toast.error("Path must start with '/'");
-      return;
-    }
-    
-    onTest(endpoint);
   };
 
   return (
@@ -181,13 +183,14 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
             </div>
           </div>
 
-          {/* Tabs for Response & Headers */}
+          {/* Tabs for Response, Headers & Proxy */}
           <Tabs defaultValue="response">
             <TabsList>
               <TabsTrigger value="response">Response</TabsTrigger>
               <TabsTrigger value="headers">Headers</TabsTrigger>
+              <TabsTrigger value="proxy">Proxy</TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="response" className="pt-4">
               <div className="space-y-2">
                 <Label>Response Body (JSON)</Label>
@@ -198,7 +201,7 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
                 />
               </div>
             </TabsContent>
-            
+
             <TabsContent value="headers" className="pt-4">
               <div className="space-y-2">
                 <Label>Response Headers</Label>
@@ -209,18 +212,45 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
                 />
               </div>
             </TabsContent>
+
+            <TabsContent value="proxy" className="pt-4">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="proxy_url">Proxy URL (optional)</Label>
+                  <Input
+                    id="proxy_url"
+                    value={endpoint.proxy_url || ""}
+                    onChange={(e) => handleChange("proxy_url", e.target.value)}
+                    placeholder={defaultProxyUrl || "https://api.example.com"}
+                  />
+                  {defaultProxyUrl && (
+                    <p className="text-sm text-blue-600">
+                      💡 Tip: Leave empty to use mock response, or enter a URL to proxy. Default proxy: <span className="font-mono text-xs">{defaultProxyUrl}</span>
+                    </p>
+                  )}
+                  <p className="text-sm text-muted-foreground">
+                    If set, requests to this endpoint will be forwarded to the specified URL instead of returning the mock response.
+                  </p>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+                  <h4 className="font-semibold text-blue-900 mb-2">Smart Proxy Mode</h4>
+                  <ul className="text-sm text-blue-800 space-y-1">
+                    <li>• Leave empty to use mock response</li>
+                    <li>• Set a URL to proxy requests to a real API</li>
+                    <li>• Headers, query params, and body are forwarded automatically</li>
+                    <li>• Useful for testing new endpoints while keeping production data</li>
+                    {defaultProxyUrl && (
+                      <li className="text-purple-700 font-medium">• Default proxy ({defaultProxyUrl}) catches all unmocked endpoints</li>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            </TabsContent>
           </Tabs>
 
           {/* Action Buttons */}
-          <div className="flex justify-end space-x-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleTest}
-              disabled={isSubmitting}
-            >
-              Test
-            </Button>
+          <div className="flex justify-end">
             <Button type="submit" disabled={isSubmitting || !isValidPath}>
               {isSubmitting ? "Adding..." : "Add Endpoint"}
             </Button>

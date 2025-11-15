@@ -42,7 +42,6 @@ const EndpointTable: React.FC<EndpointTableProps> = ({
   const [filter, setFilter] = useState({ method: "all", path: "" });
   const [detailsEndpoint, setDetailsEndpoint] = useState<Endpoint | null>(null);
 
-  // Handle filtering endpoints
   const filteredEndpoints = endpoints.filter((endpoint) => {
     const methodMatch = filter.method === "all" || endpoint.method === filter.method;
     const pathMatch = filter.path
