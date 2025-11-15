@@ -189,33 +189,27 @@ export const testEndpoint = async (
       options.body = typeof body === "string" ? body : JSON.stringify(body);
     }
 
-    // If URL is relative, prepend base URL
     const fullUrl = url.startsWith("http") ? url : `${getBaseUrl()}${url}`;
     const response = await fetch(fullUrl, options);
     
     const endTime = performance.now();
     const time = Math.round(endTime - startTime);
     
-    // Get response headers
     const responseHeaders: Record<string, string> = {};
     response.headers.forEach((value, key) => {
       responseHeaders[key] = value;
     });
     
-    // Get response data
     let data;
     const contentType = response.headers.get("content-type");
 
-    // Check if response should have no content (204 No Content, 304 Not Modified)
     if (response.status === 204 || response.status === 304) {
       data = null;
     } else if (contentType?.includes("application/json")) {
       const text = await response.text();
       try {
-        // Try to parse as JSON
         data = text.trim() ? JSON.parse(text) : null;
       } catch (e) {
-        // If JSON parsing fails, return the text we already read
         data = text;
       }
     } else {

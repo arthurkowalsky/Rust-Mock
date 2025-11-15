@@ -42,7 +42,6 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess }) => {
   const [isValidPath, setIsValidPath] = useState(true);
   const [defaultProxyUrl, setDefaultProxyUrl] = useState<string | null>(null);
 
-  // Load default proxy config on mount (but don't pre-fill the field)
   useEffect(() => {
     const loadProxyConfig = async () => {
       try {
@@ -57,13 +56,10 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess }) => {
     loadProxyConfig();
   }, []);
 
-  // Validate path format
   const validatePath = (path: string): boolean => {
-    // Check if path starts with '/'
     return path.startsWith("/");
   };
 
-  // Handle change in form fields
   const handleChange = (
     field: keyof Endpoint,
     value: string | number | object
@@ -88,11 +84,9 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess }) => {
     setEndpoint(updatedEndpoint);
   };
 
-  // Handle headers change
   const handleHeadersChange = (pairs: KeyValuePair[]) => {
     setHeaderPairs(pairs);
     
-    // Convert key-value pairs to a headers object
     const headersObj: Record<string, string> = {};
     pairs.forEach((pair) => {
       if (pair.key && pair.key.trim()) {
@@ -106,7 +100,6 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess }) => {
     }));
   };
 
-  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     

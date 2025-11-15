@@ -43,7 +43,6 @@ const Settings = () => {
       return;
     }
 
-    // Basic URL validation
     try {
       new URL(proxyUrl.trim());
     } catch {
@@ -87,7 +86,6 @@ const Settings = () => {
       const testUrl = new URL(proxyUrl.trim());
       toast.info(`Testing connection to ${testUrl.host}...`);
       
-      // Simple connectivity test
       const response = await fetch(proxyUrl.trim(), { method: 'HEAD', mode: 'no-cors' });
       toast.success("Connection test successful!");
     } catch (error) {

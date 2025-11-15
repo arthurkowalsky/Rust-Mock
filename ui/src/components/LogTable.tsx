@@ -43,7 +43,6 @@ const LogTable: React.FC<LogTableProps> = ({ logs, onRefresh }) => {
   
   const [detailsLog, setDetailsLog] = useState<RequestLog | null>(null);
 
-  // Handle filtering logs
   const filteredLogs = logs.filter((log) => {
     const methodMatch = filter.method === "all" || log.method === filter.method;
     const pathMatch = filter.path
@@ -55,7 +54,6 @@ const LogTable: React.FC<LogTableProps> = ({ logs, onRefresh }) => {
     return methodMatch && pathMatch && statusMatch;
   });
 
-  // Handle clearing logs
   const handleClearLogs = async () => {
     const confirmed = window.confirm(
       "Are you sure you want to clear all logs?"
@@ -79,7 +77,6 @@ const LogTable: React.FC<LogTableProps> = ({ logs, onRefresh }) => {
     }
   };
 
-  // Format the timestamp
   const formatTimestamp = (timestamp: string) => {
     try {
       const date = new Date(timestamp);
@@ -89,7 +86,6 @@ const LogTable: React.FC<LogTableProps> = ({ logs, onRefresh }) => {
     }
   };
 
-  // Reverse the logs array to show newest first
   const sortedLogs = [...filteredLogs].reverse();
 
   return (

@@ -407,7 +407,10 @@ async fn forward_to_proxy(
     let mut headers = reqwest::header::HeaderMap::new();
     for (key, value) in req.headers() {
         let key_str = key.as_str().to_lowercase();
-        if key_str != "host" && key_str != "connection" && key_str != "transfer-encoding" {
+        if key_str != "host"
+            && key_str != "connection"
+            && key_str != "transfer-encoding"
+            && key_str != "accept-encoding" {
             if let Ok(header_name) = reqwest::header::HeaderName::from_bytes(key.as_str().as_bytes()) {
                 if let Ok(header_value) = reqwest::header::HeaderValue::from_bytes(value.as_bytes()) {
                     headers.insert(header_name, header_value);
