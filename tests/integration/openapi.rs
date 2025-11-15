@@ -586,3 +586,111 @@ async fn test_import_comprehensive_openapi_spec() {
     assert!(paths.contains_key("/api/users/{user_id}"));
     assert!(paths.contains_key("/api/users/{user_id}/posts/{post_id}"));
 }
+#[tokio::test]
+async fn test_openapi_file_auto_import_on_startup() {
+    // Create a temporary OpenAPI spec file
+    let temp_dir = std::env::temp_dir();
+    let openapi_file_path = temp_dir.join("test_openapi_startup.json");
+    
+    let openapi_spec = json!({
+        "openapi": "3.0.0",
+        "info": {
+            "title": "Startup Test API",
+            "version": "1.0.0"
+        },
+        "paths": {
+            "/startup/test": {
+                "get": {
+                    "summary": "Test endpoint loaded on startup",
+                    "responses": {
+                        "200": {
+                            "description": "Success",
+                            "content": {
+                                "application/json": {
+                                    "example": {"message": "loaded from file", "status": "success"}
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "/startup/another": {
+                "post": {
+                    "summary": "Another test endpoint",
+                    "responses": {
+                        "201": {
+                            "description": "Created",
+                            "content": {
+                                "application/json": {
+                                    "example": {"id": 42, "created": true}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Write the spec to the temp file
+    std::fs::write(&openapi_file_path, openapi_spec.to_string())
+        .expect("Failed to write OpenAPI file");
+
+    // Start server with OPENAPI_FILE environment variable
+    let _server = TestServer::start_with_openapi_file(
+        openapi_file_path.to_str().unwrap()
+    ).await;
+    
+    let client = reqwest::Client::new();
+
+    // Verify that endpoints from the file were automatically imported
+    // Check /startup/test endpoint
+    let resp = client
+        .get(format!("{}/startup/test", BASE_URL))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status().as_u16(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["message"], "loaded from file");
+    assert_eq!(body["status"], "success");
+
+    // Check /startup/another endpoint
+    let resp = client
+        .post(format!("{}/startup/another", BASE_URL))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status().as_u16(), 201);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["id"], 42);
+    assert_eq!(body["created"], true);
+
+    // Verify endpoints appear in config
+    let resp = client
+        .get(format!("{}/__mock/config", BASE_URL))
+        .send()
+        .await
+        .unwrap();
+
+    let config: serde_json::Value = resp.json().await.unwrap();
+    let endpoints = config.as_array().unwrap();
+    
+    // Should have at least 2 endpoints loaded from file
+    assert!(endpoints.len() >= 2, "Expected at least 2 endpoints from file, got {}", endpoints.len());
+    
+    let has_startup_test = endpoints.iter().any(|e| 
+        e["method"] == "GET" && e["path"] == "/startup/test"
+    );
+    let has_startup_another = endpoints.iter().any(|e| 
+        e["method"] == "POST" && e["path"] == "/startup/another"
+    );
+    
+    assert!(has_startup_test, "Expected /startup/test endpoint in config");
+    assert!(has_startup_another, "Expected /startup/another endpoint in config");
+
+    // Clean up temp file
+    let _ = std::fs::remove_file(&openapi_file_path);
+}
