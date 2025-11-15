@@ -17,7 +17,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { Endpoint, HttpMethod, KeyValuePair } from "@/types";
-import { addEndpoint, testEndpoint, getProxyConfig } from "@/utils/api";
+import { addEndpoint, getProxyConfig } from "@/utils/api";
 import JsonEditor from "./JsonEditor";
 import KeyValueEditor from "./KeyValueEditor";
 import { toast } from "sonner";
@@ -33,28 +33,22 @@ const DEFAULT_ENDPOINT: Endpoint = {
 
 interface AddEndpointFormProps {
   onSuccess: () => void;
-  onTest: (endpoint: Endpoint) => void;
 }
 
-const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) => {
+const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess }) => {
   const [endpoint, setEndpoint] = useState<Endpoint>({ ...DEFAULT_ENDPOINT });
   const [headerPairs, setHeaderPairs] = useState<KeyValuePair[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isValidPath, setIsValidPath] = useState(true);
   const [defaultProxyUrl, setDefaultProxyUrl] = useState<string | null>(null);
 
-  // Load default proxy config on mount
+  // Load default proxy config on mount (but don't pre-fill the field)
   useEffect(() => {
     const loadProxyConfig = async () => {
       try {
         const config = await getProxyConfig();
         if (config && config.enabled && config.proxy_url) {
           setDefaultProxyUrl(config.proxy_url);
-          // Pre-fill the proxy_url field with the default proxy
-          setEndpoint((prev) => ({
-            ...prev,
-            proxy_url: config.proxy_url,
-          }));
         }
       } catch (error) {
         console.error("Failed to load proxy config:", error);
@@ -136,16 +130,6 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  // Handle testing the endpoint
-  const handleTest = () => {
-    if (!isValidPath) {
-      toast.error("Path must start with '/'");
-      return;
-    }
-    
-    onTest(endpoint);
   };
 
   return (
@@ -246,12 +230,9 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
                     onChange={(e) => handleChange("proxy_url", e.target.value)}
                     placeholder={defaultProxyUrl || "https://api.example.com"}
                   />
-                  {defaultProxyUrl && endpoint.proxy_url === defaultProxyUrl && (
-                    <p className="text-sm text-purple-600 flex items-center gap-1">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      Using default proxy from Settings
+                  {defaultProxyUrl && (
+                    <p className="text-sm text-blue-600">
+                      💡 Tip: Leave empty to use mock response, or enter a URL to proxy. Default proxy: <span className="font-mono text-xs">{defaultProxyUrl}</span>
                     </p>
                   )}
                   <p className="text-sm text-muted-foreground">
@@ -267,7 +248,7 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
                     <li>• Headers, query params, and body are forwarded automatically</li>
                     <li>• Useful for testing new endpoints while keeping production data</li>
                     {defaultProxyUrl && (
-                      <li className="text-purple-700 font-medium">• Default proxy is pre-filled (clear it to use mock response)</li>
+                      <li className="text-purple-700 font-medium">• Default proxy ({defaultProxyUrl}) catches all unmocked endpoints</li>
                     )}
                   </ul>
                 </div>
@@ -276,15 +257,7 @@ const AddEndpointForm: React.FC<AddEndpointFormProps> = ({ onSuccess, onTest }) 
           </Tabs>
 
           {/* Action Buttons */}
-          <div className="flex justify-end space-x-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleTest}
-              disabled={isSubmitting}
-            >
-              Test
-            </Button>
+          <div className="flex justify-end">
             <Button type="submit" disabled={isSubmitting || !isValidPath}>
               {isSubmitting ? "Adding..." : "Add Endpoint"}
             </Button>
