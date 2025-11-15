@@ -1,5 +1,5 @@
 
-import { Endpoint, EndpointResponse, RequestLog, ServerConfig } from "@/types";
+import { Endpoint, EndpointResponse, RequestLog, ServerConfig, ProxyConfig } from "@/types";
 import { toast } from "sonner";
 
 const getBaseUrl = (): string => {
@@ -189,24 +189,29 @@ export const testEndpoint = async (
       options.body = typeof body === "string" ? body : JSON.stringify(body);
     }
 
-    // If URL is relative, prepend base URL
     const fullUrl = url.startsWith("http") ? url : `${getBaseUrl()}${url}`;
     const response = await fetch(fullUrl, options);
     
     const endTime = performance.now();
     const time = Math.round(endTime - startTime);
     
-    // Get response headers
     const responseHeaders: Record<string, string> = {};
     response.headers.forEach((value, key) => {
       responseHeaders[key] = value;
     });
     
-    // Get response data
     let data;
     const contentType = response.headers.get("content-type");
-    if (contentType?.includes("application/json")) {
-      data = await response.json();
+
+    if (response.status === 204 || response.status === 304) {
+      data = null;
+    } else if (contentType?.includes("application/json")) {
+      const text = await response.text();
+      try {
+        data = text.trim() ? JSON.parse(text) : null;
+      } catch (e) {
+        data = text;
+      }
     } else {
       data = await response.text();
     }
@@ -311,5 +316,66 @@ export const exportOpenAPI = async (): Promise<void> => {
   } catch (error) {
     console.error("Failed to export OpenAPI:", error);
     toast.error("Failed to export OpenAPI. Check if Rust Mock server is running.");
+  }
+};
+
+export const getProxyConfig = async (): Promise<ProxyConfig | null> => {
+  try {
+    const response = await fetch(`${getBaseUrl()}/__mock/proxy`);
+    if (!response.ok) {
+      throw new Error(`Error fetching proxy config: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Failed to fetch proxy config:", error);
+    toast.error("Failed to fetch proxy configuration");
+    return null;
+  }
+};
+
+export const setProxyConfig = async (url: string): Promise<ProxyConfig | null> => {
+  try {
+    const response = await fetch(`${getBaseUrl()}/__mock/proxy`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ url }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error setting proxy config: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+
+    if (result.enabled) {
+      toast.success(`Default proxy URL set to: ${result.proxy_url}`);
+    } else {
+      toast.success("Default proxy disabled");
+    }
+
+    return result;
+  } catch (error) {
+    console.error("Failed to set proxy config:", error);
+    toast.error("Failed to set proxy configuration");
+    return null;
+  }
+};
+
+export const deleteProxyConfig = async (): Promise<void> => {
+  try {
+    const response = await fetch(`${getBaseUrl()}/__mock/proxy`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error deleting proxy config: ${response.statusText}`);
+    }
+
+    toast.success("Default proxy removed");
+  } catch (error) {
+    console.error("Failed to delete proxy config:", error);
+    toast.error("Failed to delete proxy configuration");
   }
 };

@@ -19,7 +19,6 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
   const [text, setText] = useState<string>("");
   const [isValid, setIsValid] = useState<boolean>(true);
 
-  // Format the JSON string
   const formatJson = (json: string): string => {
     try {
       const obj = JSON.parse(json);
@@ -29,7 +28,6 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
     }
   };
 
-  // Initialize the editor with the provided value
   useEffect(() => {
     if (value) {
       const jsonString = typeof value === 'string' 
@@ -39,13 +37,11 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
     }
   }, [value]);
 
-  // Handle changes to the text
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value;
     setText(newText);
     
     try {
-      // Only parse if there's text
       if (newText.trim()) {
         const parsed = JSON.parse(newText);
         onChange(parsed);
@@ -59,7 +55,6 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
     }
   };
 
-  // Format the JSON when the editor loses focus
   const handleBlur = () => {
     try {
       if (text.trim()) {

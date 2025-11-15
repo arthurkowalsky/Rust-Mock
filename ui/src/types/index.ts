@@ -7,24 +7,23 @@ export interface Endpoint {
   response: any;
   status?: number;
   headers?: Record<string, string>;
+  proxy_url?: string;
 }
 
 export interface RequestLog {
-  // Request data
   method: HttpMethod;
   path: string;
   request_headers: Record<string, string>;
   query: string;
   request_body?: any;
 
-  // Response data
   status: number;
   response_body?: any;
   response_headers: Record<string, string>;
 
-  // Metadata
   timestamp: string;
   matched_endpoint?: string;
+  proxied_to?: string;
 }
 
 export interface EndpointResponse {
@@ -47,4 +46,9 @@ export interface Tab {
 export interface ServerConfig {
   host: string;
   port: number;
+}
+
+export interface ProxyConfig {
+  proxy_url: string | null;
+  enabled: boolean;
 }

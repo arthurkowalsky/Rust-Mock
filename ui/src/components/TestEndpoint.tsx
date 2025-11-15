@@ -37,7 +37,6 @@ const TestEndpoint: React.FC<TestEndpointProps> = ({ initialEndpoint }) => {
   const [history, setHistory] = useState<any[]>([]);
   const [copied, setCopied] = useState(false);
 
-  // Response state
   const [response, setResponse] = useState<{
     status: number;
     time: number;
@@ -45,13 +44,11 @@ const TestEndpoint: React.FC<TestEndpointProps> = ({ initialEndpoint }) => {
     data: any;
   } | null>(null);
 
-  // Extract path parameters from URL template
   const extractPathParams = (pathTemplate: string): string[] => {
     const matches = pathTemplate.match(/\{([^}]+)\}/g);
     return matches ? matches.map(m => m.slice(1, -1)) : [];
   };
 
-  // Build final URL by replacing parameters
   const buildFinalUrl = (template: string, params: Record<string, string>): string => {
     let finalUrl = template;
     Object.entries(params).forEach(([key, value]) => {
@@ -60,10 +57,8 @@ const TestEndpoint: React.FC<TestEndpointProps> = ({ initialEndpoint }) => {
     return finalUrl;
   };
 
-  // Get current path parameters
   const currentPathParams = extractPathParams(url);
 
-  // Initialize path param values when URL changes
   useEffect(() => {
     const params = extractPathParams(url);
     const newPathParams: Record<string, string> = {};
@@ -73,19 +68,16 @@ const TestEndpoint: React.FC<TestEndpointProps> = ({ initialEndpoint }) => {
     setPathParams(newPathParams);
   }, [url]);
 
-  // Load test history on component mount
   useEffect(() => {
     setHistory(getTestHistory());
   }, []);
 
-  // Set up the initial endpoint if provided
   useEffect(() => {
     if (initialEndpoint) {
       setMethod(initialEndpoint.method);
       setUrl(initialEndpoint.path);
       setRequestBody(initialEndpoint.response || {});
       
-      // Convert headers object to key-value pairs
       if (initialEndpoint.headers) {
         const pairs = Object.entries(initialEndpoint.headers).map(([key, value]) => ({
           key,
@@ -96,12 +88,10 @@ const TestEndpoint: React.FC<TestEndpointProps> = ({ initialEndpoint }) => {
     }
   }, [initialEndpoint]);
 
-  // Handle headers change
   const handleHeadersChange = (pairs: KeyValuePair[]) => {
     setHeaderPairs(pairs);
   };
 
-  // Convert header pairs to a headers object
   const getHeadersObject = () => {
     const headers: Record<string, string> = {};
     headerPairs.forEach((pair) => {
@@ -112,7 +102,6 @@ const TestEndpoint: React.FC<TestEndpointProps> = ({ initialEndpoint }) => {
     return headers;
   };
 
-  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -125,22 +114,16 @@ const TestEndpoint: React.FC<TestEndpointProps> = ({ initialEndpoint }) => {
       setIsTesting(true);
       setResponse(null);
       
-      // Get headers object from key-value pairs
       const headers = getHeadersObject();
 
-      // Build final URL by replacing path parameters
       const finalUrl = buildFinalUrl(url, pathParams);
 
-      // Make the test request
       const result = await testEndpoint(method, finalUrl, headers, method !== "GET" ? requestBody : undefined);
       
-      // Update the response state
       setResponse(result);
       
-      // Save to test history
       saveTestHistory(method, url, headers, requestBody);
       
-      // Update history in state
       setHistory(getTestHistory());
     } catch (error) {
       console.error("Error testing endpoint:", error);
@@ -150,13 +133,11 @@ const TestEndpoint: React.FC<TestEndpointProps> = ({ initialEndpoint }) => {
     }
   };
 
-  // Handle loading from history
   const handleLoadFromHistory = (entry: any) => {
     setMethod(entry.method as HttpMethod);
     setUrl(entry.url);
     setRequestBody(entry.body || {});
     
-    // Convert headers object to key-value pairs
     if (entry.headers) {
       const pairs = Object.entries(entry.headers).map(([key, value]) => ({
         key,
@@ -168,7 +149,6 @@ const TestEndpoint: React.FC<TestEndpointProps> = ({ initialEndpoint }) => {
     }
   };
 
-  // Copy response as JSON
   const handleCopyResponse = () => {
     if (response) {
       const responseText = JSON.stringify(response.data, null, 2);
