@@ -4,10 +4,10 @@ services:
     ports:
       - "8090:8090"
     #volumes:
-    # Uncomment to mount an OpenAPI spec file (endpoints will be auto-imported on startup)
+    # Uncomment the line below to use an OpenAPI spec file
     # - ./openapi.json:/app/openapi.json
     environment:
-      # Uncomment to enable auto-import of OpenAPI spec file on startup
+      # Uncomment the line below to enable OpenAPI spec file
       # - OPENAPI_FILE=/app/openapi.json
       # Default host and port settings
       - HOST=0.0.0.0

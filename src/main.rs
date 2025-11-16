@@ -178,7 +178,6 @@ pub struct ImportRequest {
     pub openapi_spec: Value,
 }
 
-// Helper function to import OpenAPI spec into dynamic endpoints
 fn import_openapi_spec(
     spec: &OpenAPI,
     dyn_map: &mut HashMap<(String, String), DynamicEndpoint>,
@@ -562,10 +561,8 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting server host={} port={}", cfg.host, cfg.port);
 
-    // Initialize dynamic endpoints map
     let mut dynamic_endpoints = HashMap::new();
 
-    // Auto-import OpenAPI file if OPENAPI_FILE is specified
     if let Some(openapi_path) = env::var("OPENAPI_FILE").ok() {
         match fs::read_to_string(&openapi_path) {
             Ok(content) => {

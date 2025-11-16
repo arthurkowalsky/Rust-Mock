@@ -60,7 +60,6 @@ async fn test_proxy_config_endpoints() {
 }
 
 #[tokio::test]
-#[ignore = "Requires external network access to httpbin.org"]
 async fn test_endpoint_with_proxy_url() {
     let _server = TestServer::start().await;
     let client = reqwest::Client::new();
@@ -90,7 +89,6 @@ async fn test_endpoint_with_proxy_url() {
 }
 
 #[tokio::test]
-#[ignore = "Requires external network access to httpbin.org"]
 async fn test_endpoint_proxy_to_httpbin_status() {
     let _server = TestServer::start().await;
     let client = reqwest::Client::new();
@@ -120,7 +118,6 @@ async fn test_endpoint_proxy_to_httpbin_status() {
 }
 
 #[tokio::test]
-#[ignore = "Requires external network access to httpbin.org"]
 async fn test_default_proxy_mode() {
     let _server = TestServer::start().await;
     let client = reqwest::Client::new();
@@ -147,7 +144,6 @@ async fn test_default_proxy_mode() {
 }
 
 #[tokio::test]
-#[ignore = "Requires external network access to httpbin.org"]
 async fn test_mixed_mock_and_proxy() {
     let _server = TestServer::start().await;
     let client = reqwest::Client::new();
@@ -216,7 +212,6 @@ async fn test_mixed_mock_and_proxy() {
 }
 
 #[tokio::test]
-#[ignore = "Requires external network access to httpbin.org"]
 async fn test_proxy_with_query_params() {
     let _server = TestServer::start().await;
     let client = reqwest::Client::new();
@@ -248,7 +243,6 @@ async fn test_proxy_with_query_params() {
 }
 
 #[tokio::test]
-#[ignore = "Requires external network access to httpbin.org"]
 async fn test_proxy_post_with_body() {
     let _server = TestServer::start().await;
     let client = reqwest::Client::new();
@@ -281,7 +275,6 @@ async fn test_proxy_post_with_body() {
 }
 
 #[tokio::test]
-#[ignore = "Requires external network access to httpbin.org"]
 async fn test_proxy_failure_returns_502() {
     let _server = TestServer::start().await;
     let client = reqwest::Client::new();
@@ -311,7 +304,6 @@ async fn test_proxy_failure_returns_502() {
 }
 
 #[tokio::test]
-#[ignore = "Requires external network access to httpbin.org"]
 async fn test_proxy_does_not_forward_accept_encoding() {
     let _server = TestServer::start().await;
     let client = reqwest::Client::new();

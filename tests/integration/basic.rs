@@ -188,8 +188,6 @@ async fn test_remove_nonexistent_endpoint() {
 
     assert!(response.status().is_success());
     let body: serde_json::Value = response.json().await.unwrap();
-    // After refactoring: removing non-existent endpoint returns false
-    // (previously returned true via removed_spec, but that was removed)
     assert_eq!(body["removed"], false);
 }
 
