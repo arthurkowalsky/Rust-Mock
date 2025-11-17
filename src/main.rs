@@ -9,7 +9,7 @@ use regex::Regex;
 use reqwest;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{collections::{HashMap, HashSet}, env, fs, sync::Mutex};
+use std::{collections::HashMap, env, fs, sync::Mutex};
 
 #[derive(Serialize, Clone)]
 pub struct RequestLog {
@@ -41,9 +41,6 @@ pub struct DynamicEndpoint {
 
 pub struct AppState {
     pub dynamic: Mutex<HashMap<(String, String), DynamicEndpoint>>,
-    pub removed_spec: Mutex<HashSet<(String, String)>>,
-    pub spec: Option<OpenAPI>,
-    pub raw_spec: Option<Value>,
     pub logs: Mutex<Vec<RequestLog>>,
     pub default_proxy_url: Mutex<Option<String>>,
 }
@@ -72,50 +69,6 @@ pub struct EndpointConfig {
 pub struct RemoveConfig {
     pub method: String,
     pub path: String,
-}
-
-fn get_operation(spec: &OpenAPI, method: &str, req_path: &str) -> Option<Operation> {
-    for (tpl, item) in &spec.paths.paths {
-        if let ReferenceOr::Item(path_item) = item {
-            let re = Regex::new(&format!("^{}$", tpl.replace('{', "(?P<").replace('}', ">[^/]+)"))).unwrap();
-            if re.is_match(req_path) {
-                let op = match method {
-                    "GET" => &path_item.get,
-                    "POST" => &path_item.post,
-                    "PUT" => &path_item.put,
-                    "PATCH" => &path_item.patch,
-                    "DELETE" => &path_item.delete,
-                    _ => &None,
-                };
-                if let Some(o) = op.clone() {
-                    return Some(o);
-                }
-            }
-        }
-    }
-    None
-}
-
-fn get_request_schema(raw_spec: &Value, method: &str, path: &str) -> Option<Value> {
-    raw_spec.get("paths")?.get(path)?.get(&method.to_lowercase())?
-        .get("requestBody")?.get("content")?.get("application/json")?
-        .get("schema").cloned()
-}
-
-fn extract_example_response(op: &Operation) -> Option<Value> {
-    // Try common success status codes
-    for status_code in [200, 201, 204, 202] {
-        if let Some(item) = op.responses.responses.get(&StatusCode::Code(status_code)) {
-            if let ReferenceOr::Item(resp) = item {
-                if let Some(media) = resp.content.get("application/json") {
-                    if let Some(example) = &media.example {
-                        return Some(example.clone());
-                    }
-                }
-            }
-        }
-    }
-    None
 }
 
 fn extract_example_response_for_status(op: &Operation, status: u16) -> Option<Value> {
@@ -156,40 +109,24 @@ pub async fn add_endpoint(data: web::Data<AppState>, cfg: web::Json<EndpointConf
 
 pub async fn remove_endpoint(data: web::Data<AppState>, cfg: web::Json<RemoveConfig>) -> impl Responder {
     let mut dyn_map = data.dynamic.lock().unwrap();
-    let mut rem_spec = data.removed_spec.lock().unwrap();
     let key = (cfg.method.clone(), cfg.path.clone());
-    let removed = if dyn_map.remove(&key).is_some() {
-        true
-    } else {
-        rem_spec.insert(key)
-    };
+    let removed = dyn_map.remove(&key).is_some();
     info!("Removed endpoint {} {}: {}", cfg.method, cfg.path, removed);
     HttpResponse::Ok().json(json!({"removed": removed}))
 }
 
 pub async fn get_config(data: web::Data<AppState>) -> impl Responder {
     let mut list = Vec::new();
-    if let Some(spec) = &data.spec {
-        let rem = data.removed_spec.lock().unwrap();
-        if let Some(raw) = &data.raw_spec {
-            for (tpl, item) in &spec.paths.paths {
-                if let ReferenceOr::Item(path_item) = item {
-                    for (m, op_opt) in ["GET", "POST", "PUT", "PATCH", "DELETE"].iter()
-                        .filter_map(|&m| Some((m, match m {"GET"=>&path_item.get,"POST"=>&path_item.post,"PUT"=>&path_item.put,"PATCH"=>&path_item.patch,"DELETE"=>&path_item.delete,_=>&None})))
-                    {
-                        if op_opt.is_some() && !rem.contains(&(m.to_string(), tpl.clone())) {
-                            let schema = get_request_schema(raw, m, tpl);
-                            let example = extract_example_response(op_opt.as_ref().unwrap());
-                            list.push(json!({"method": m, "path": tpl, "request_schema": schema, "response_example": example}));
-                        }
-                    }
-                }
-            }
-        }
-    }
     let dyn_map = data.dynamic.lock().unwrap();
-    for ((m,p), ep) in dyn_map.iter() {
-        list.push(json!({"method": m, "path": p, "request_schema": null, "response": ep.response, "status": ep.status, "headers": ep.headers}));
+    for ((m, p), ep) in dyn_map.iter() {
+        list.push(json!({
+            "method": m,
+            "path": p,
+            "response": ep.response,
+            "status": ep.status,
+            "headers": ep.headers,
+            "proxy_url": ep.proxy_url
+        }));
     }
     HttpResponse::Ok().json(list)
 }
@@ -241,20 +178,12 @@ pub struct ImportRequest {
     pub openapi_spec: Value,
 }
 
-pub async fn import_openapi(data: web::Data<AppState>, req: web::Json<ImportRequest>) -> impl Responder {
-    // Validate and parse OpenAPI spec
-    let spec = match serde_json::from_value::<OpenAPI>(req.openapi_spec.clone()) {
-        Ok(s) => s,
-        Err(e) => {
-            return HttpResponse::BadRequest().json(json!({
-                "error": format!("Invalid OpenAPI specification: {}", e)
-            }));
-        }
-    };
-
+fn import_openapi_spec(
+    spec: &OpenAPI,
+    dyn_map: &mut HashMap<(String, String), DynamicEndpoint>,
+) -> (usize, Vec<Value>) {
     let mut imported_count = 0;
     let mut endpoints = Vec::new();
-    let mut dyn_map = data.dynamic.lock().unwrap();
 
     // Iterate through all paths and operations
     for (path, item) in &spec.paths.paths {
@@ -294,7 +223,7 @@ pub async fn import_openapi(data: web::Data<AppState>, req: web::Json<ImportRequ
                         proxy_url: None,
                     };
 
-                    dyn_map.insert((method.to_string(), path.clone()), endpoint.clone());
+                    dyn_map.insert((method.to_string(), path.clone()), endpoint);
                     endpoints.push(json!({
                         "method": method,
                         "path": path,
@@ -306,6 +235,23 @@ pub async fn import_openapi(data: web::Data<AppState>, req: web::Json<ImportRequ
             }
         }
     }
+
+    (imported_count, endpoints)
+}
+
+pub async fn import_openapi(data: web::Data<AppState>, req: web::Json<ImportRequest>) -> impl Responder {
+    // Validate and parse OpenAPI spec
+    let spec = match serde_json::from_value::<OpenAPI>(req.openapi_spec.clone()) {
+        Ok(s) => s,
+        Err(e) => {
+            return HttpResponse::BadRequest().json(json!({
+                "error": format!("Invalid OpenAPI specification: {}", e)
+            }));
+        }
+    };
+
+    let mut dyn_map = data.dynamic.lock().unwrap();
+    let (imported_count, endpoints) = import_openapi_spec(&spec, &mut dyn_map);
 
     HttpResponse::Ok().json(json!({
         "imported": true,
@@ -577,23 +523,6 @@ pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppSta
                 HttpResponse::BadGateway().json(json!({"error": "Default proxy request failed", "details": e}))
             }
         }
-    } else if let Some(spec) = &data.spec {
-        // OPENAPI SPEC MODE: Return example from spec
-        if let Some(op) = get_operation(spec, &method, &path) {
-            if let Some(example) = extract_example_response(&op) {
-                status = 200;
-                response_body = Some(example.clone());
-                response_headers.insert("content-type".to_string(), "application/json".to_string());
-                matched_pattern = Some("OpenAPI spec".to_string());
-                HttpResponse::Ok().content_type("application/json").body(example.to_string())
-            } else {
-                status = 200;
-                HttpResponse::Ok().finish()
-            }
-        } else {
-            status = 404;
-            HttpResponse::NotFound().finish()
-        }
     } else {
         // NO MATCH: 404
         status = 404;
@@ -631,37 +560,47 @@ async fn main() -> std::io::Result<()> {
     }
 
     info!("Starting server host={} port={}", cfg.host, cfg.port);
-    let raw = env::var("OPENAPI_FILE").ok()
-        .and_then(|p| fs::read_to_string(&p).ok())
-        .and_then(|s| serde_json::from_str::<Value>(&s).ok());
-    let spec = raw.as_ref().and_then(|_v| serde_json::from_value::<OpenAPI>(_v.clone()).ok());
-    if let (Some(_v), Some(o)) = (raw.as_ref(), spec.as_ref()) {
-        let mut list = Vec::new();
-        for (tpl, item) in &o.paths.paths {
-            if let ReferenceOr::Item(pi) = item {
-                for m in ["GET","POST","PUT","PATCH","DELETE"] {
-                    let op = match m {"GET"=>&pi.get,"POST"=>&pi.post,"PUT"=>&pi.put,"PATCH"=>&pi.patch,"DELETE"=>&pi.delete,_=>&None};
-                    if op.is_some() {
-                        list.push(format!("{} {}", m, tpl));
+
+    let mut dynamic_endpoints = HashMap::new();
+
+    if let Some(openapi_path) = env::var("OPENAPI_FILE").ok() {
+        match fs::read_to_string(&openapi_path) {
+            Ok(content) => {
+                match serde_json::from_str::<Value>(&content) {
+                    Ok(raw_spec) => {
+                        match serde_json::from_value::<OpenAPI>(raw_spec) {
+                            Ok(spec) => {
+                                let (count, _) = import_openapi_spec(&spec, &mut dynamic_endpoints);
+                                info!("Auto-imported {} endpoints from OPENAPI_FILE: {}", count, openapi_path);
+                            }
+                            Err(e) => {
+                                info!("Failed to parse OPENAPI_FILE as OpenAPI spec: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        info!("Failed to parse OPENAPI_FILE as JSON: {}", e);
                     }
                 }
             }
+            Err(e) => {
+                info!("Failed to read OPENAPI_FILE {}: {}", openapi_path, e);
+            }
         }
-        info!("Registered OpenAPI endpoints at startup: {:?}", list);
-    } else if raw.is_none() {
+    } else {
         info!("No OPENAPI_FILE specified");
     }
+
     if let Some(ref url) = cfg.default_proxy_url {
         info!("Default proxy URL configured: {}", url);
     }
+
     let state = web::Data::new(AppState {
-        dynamic: Mutex::new(HashMap::new()),
-        removed_spec: Mutex::new(HashSet::new()),
-        spec,
-        raw_spec: raw,
+        dynamic: Mutex::new(dynamic_endpoints),
         logs: Mutex::new(vec![]),
         default_proxy_url: Mutex::new(cfg.default_proxy_url),
     });
+
     HttpServer::new(move || {
         App::new()
             .app_data(state.clone())
