@@ -71,6 +71,18 @@ pub struct RemoveConfig {
     pub path: String,
 }
 
+#[derive(Deserialize)]
+pub struct UpdateConfig {
+    pub old_method: String,
+    pub old_path: String,
+    pub method: String,
+    pub path: String,
+    pub response: Value,
+    pub status: Option<u16>,
+    pub headers: Option<HashMap<String, String>>,
+    pub proxy_url: Option<String>,
+}
+
 fn extract_example_response_for_status(op: &Operation, status: u16) -> Option<Value> {
     if let Some(item) = op.responses.responses.get(&StatusCode::Code(status)) {
         if let ReferenceOr::Item(resp) = item {
@@ -113,6 +125,43 @@ pub async fn remove_endpoint(data: web::Data<AppState>, cfg: web::Json<RemoveCon
     let removed = dyn_map.remove(&key).is_some();
     info!("Removed endpoint {} {}: {}", cfg.method, cfg.path, removed);
     HttpResponse::Ok().json(json!({"removed": removed}))
+}
+
+pub async fn update_endpoint(data: web::Data<AppState>, cfg: web::Json<UpdateConfig>) -> impl Responder {
+    let mut dyn_map = data.dynamic.lock().unwrap();
+
+    let old_key = (cfg.old_method.clone(), cfg.old_path.clone());
+    let new_key = (cfg.method.clone(), cfg.path.clone());
+
+    if !dyn_map.contains_key(&old_key) {
+        return HttpResponse::NotFound().json(json!({
+            "updated": false,
+            "error": "Endpoint not found"
+        }));
+    }
+
+    if old_key != new_key && dyn_map.contains_key(&new_key) {
+        return HttpResponse::Conflict().json(json!({
+            "updated": false,
+            "error": "Endpoint with new method/path already exists"
+        }));
+    }
+
+    dyn_map.remove(&old_key);
+
+    let status = cfg.status.unwrap_or(200);
+    let ep = DynamicEndpoint {
+        response: cfg.response.clone(),
+        status,
+        headers: cfg.headers.clone(),
+        proxy_url: cfg.proxy_url.clone(),
+    };
+    dyn_map.insert(new_key.clone(), ep);
+
+    info!("Updated endpoint {} {} -> {} {}",
+          cfg.old_method, cfg.old_path, cfg.method, cfg.path);
+
+    HttpResponse::Ok().json(json!({"updated": true}))
 }
 
 pub async fn get_config(data: web::Data<AppState>) -> impl Responder {
@@ -608,6 +657,7 @@ async fn main() -> std::io::Result<()> {
             .service(web::scope("/__mock")
                 .route("/endpoints", web::post().to(add_endpoint))
                 .route("/endpoints", web::delete().to(remove_endpoint))
+                .route("/endpoints", web::put().to(update_endpoint))
                 .route("/config", web::get().to(get_config))
                 .route("/logs", web::get().to(get_logs))
                 .route("/logs", web::delete().to(clear_logs))

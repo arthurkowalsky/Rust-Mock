@@ -149,6 +149,48 @@ export const removeEndpoint = async (method: string, path: string): Promise<Endp
   }
 };
 
+export const updateEndpoint = async (
+  oldMethod: string,
+  oldPath: string,
+  endpoint: Endpoint
+): Promise<EndpointResponse> => {
+  try {
+    const response = await fetch(`${getBaseUrl()}/__mock/endpoints`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        old_method: oldMethod,
+        old_path: oldPath,
+        method: endpoint.method,
+        path: endpoint.path,
+        response: endpoint.response,
+        status: endpoint.status,
+        headers: endpoint.headers,
+        proxy_url: endpoint.proxy_url,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      toast.error(result.error || "Failed to update endpoint");
+      return { error: result.error || "Failed to update endpoint" };
+    }
+
+    if (result.updated) {
+      toast.success(`Endpoint ${endpoint.method} ${endpoint.path} updated successfully`);
+    }
+
+    return result;
+  } catch (error) {
+    console.error("Failed to update endpoint:", error);
+    toast.error("Failed to update endpoint. Check if Rust Mock server is running.");
+    return { error: String(error) };
+  }
+};
+
 export const fetchLogs = async (): Promise<RequestLog[]> => {
   try {
     const response = await fetch(`${getBaseUrl()}/__mock/logs`);
