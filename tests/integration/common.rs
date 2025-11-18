@@ -12,6 +12,14 @@ pub struct TestServer {
 
 impl TestServer {
     pub async fn start() -> Self {
+        Self::start_with_env(None).await
+    }
+
+    pub async fn start_with_openapi_file(openapi_path: &str) -> Self {
+        Self::start_with_env(Some(vec![("OPENAPI_FILE", openapi_path)])).await
+    }
+
+    async fn start_with_env(env_vars: Option<Vec<(&str, &str)>>) -> Self {
         let build_status = Command::new("cargo")
             .args(&["build", "--release"])
             .stdout(Stdio::null())
@@ -21,12 +29,18 @@ impl TestServer {
 
         assert!(build_status.success(), "Build failed");
 
-        let process = Command::new("./target/release/RustMock")
-            .args(&["--port", &TEST_PORT.to_string()])
+        let mut cmd = Command::new("./target/release/RustMock");
+        cmd.args(&["--port", &TEST_PORT.to_string()])
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("Failed to start server");
+            .stderr(Stdio::null());
+
+        if let Some(env_vars) = env_vars {
+            for (key, value) in env_vars {
+                cmd.env(key, value);
+            }
+        }
+
+        let process = cmd.spawn().expect("Failed to start server");
 
         let client = reqwest::Client::new();
 

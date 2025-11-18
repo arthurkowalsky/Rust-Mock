@@ -188,7 +188,7 @@ async fn test_remove_nonexistent_endpoint() {
 
     assert!(response.status().is_success());
     let body: serde_json::Value = response.json().await.unwrap();
-    assert_eq!(body["removed"], true);
+    assert_eq!(body["removed"], false);
 }
 
 #[tokio::test]
