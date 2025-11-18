@@ -4,21 +4,21 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-actix-web = "4.10"
+actix-web = "4.12"
 actix-files = "0.6"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-openapiv3 = "2.0"
+openapiv3 = "2.2"
 chrono = { version = "0.4", features = ["serde"] }
 env_logger = "0.11"
-clap = { version = "4.5.35", features = ["derive"] }
-regex = "1.11.1"
-log = "0.4.27"
+clap = { version = "4.5", features = ["derive"] }
+regex = "1.12"
+log = "0.4"
 reqwest = { version = "0.12", features = ["json"] }
-awc = "3.5"
+awc = "3.8"
 
 [dev-dependencies]
-actix-rt = "2.10.0"
-serde_json = "1.0.140"
-tokio = { version = "1.0", features = ["full"] }
+actix-rt = "2.11"
+serde_json = "1.0"
+tokio = { version = "1.48", features = ["full"] }
 reqwest = { version = "0.12", features = ["json"] }
