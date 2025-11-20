@@ -5,7 +5,7 @@ RUN npm install
 COPY ui/ ./
 RUN npm run build
 
-FROM rust:1.86-slim AS rust-builder
+FROM rust:1.83-slim AS rust-builder
 WORKDIR /app
 COPY Cargo.* ./
 COPY src/ ./src/
