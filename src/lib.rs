@@ -1,7 +1,6 @@
 use actix_files::Files;
 use actix_web::{middleware::Logger, guard, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use chrono::Local;
-use clap::Parser;
 use env_logger::Builder;
 use log::{info, warn, LevelFilter};
 use openapiv3::{OpenAPI, Operation, ReferenceOr, StatusCode};
@@ -45,17 +44,25 @@ pub struct AppState {
     pub default_proxy_url: Mutex<Option<String>>,
 }
 
-#[derive(Parser)]
-struct Config {
-    #[clap(long, default_value = "0.0.0.0")]
-    host: String,
-    #[clap(long, default_value = "8090")]
-    port: u16,
-    #[clap(long)]
-    default_proxy_url: Option<String>,
+// Server configuration (used by both CLI and old binary)
+#[derive(Debug, Clone)]
+pub struct ServerConfig {
+    pub host: String,
+    pub port: u16,
+    pub default_proxy_url: Option<String>,
 }
 
-#[derive(Deserialize)]
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            host: "0.0.0.0".to_string(),
+            port: 8090,
+            default_proxy_url: None,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct EndpointConfig {
     pub method: String,
     pub path: String,
@@ -227,7 +234,26 @@ pub struct ImportRequest {
     pub openapi_spec: Value,
 }
 
-fn import_openapi_spec(
+// Helper function to load OpenAPI spec from file (YAML or JSON)
+pub fn load_openapi_from_file(path: &std::path::Path) -> Result<OpenAPI, String> {
+    let content = fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    // Try YAML first (supports both YAML and JSON)
+    let raw_value: Value = if path.extension().and_then(|s| s.to_str()) == Some("yaml")
+        || path.extension().and_then(|s| s.to_str()) == Some("yml") {
+        serde_yaml::from_str(&content)
+            .map_err(|e| format!("Failed to parse YAML: {}", e))?
+    } else {
+        serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse JSON: {}", e))?
+    };
+
+    serde_json::from_value(raw_value)
+        .map_err(|e| format!("Invalid OpenAPI specification: {}", e))
+}
+
+pub fn import_openapi_spec(
     spec: &OpenAPI,
     dyn_map: &mut HashMap<(String, String), DynamicEndpoint>,
 ) -> (usize, Vec<Value>) {
@@ -598,10 +624,14 @@ pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppSta
     response
 }
 
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
+// Initialize logger (call once at startup)
+pub fn init_logger() {
     Builder::new().filter(None, LevelFilter::Info).init();
-    let mut cfg = Config::parse();
+}
+
+// Public function to start the server (used by both binaries and CLI)
+pub async fn start_server(cfg: ServerConfig) -> std::io::Result<()> {
+    let mut cfg = cfg;
 
     // Check env variable for default proxy URL if not set via CLI
     if cfg.default_proxy_url.is_none() {

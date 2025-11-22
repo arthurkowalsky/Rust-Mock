@@ -18,8 +18,8 @@ RustMock is an elegant, high-performance mock server designed for developers who
 
 ## 🚀 Features
 
+- **🎯 Powerful CLI**: Intuitive command-line interface with interactive mode for instant API mocking
 - **⚡ Blazing Fast Performance**: Built on Rust and Actix Web for exceptional speed
-- **🎯 Dynamic API Mocking**: Create and configure mock endpoints on-the-fly
 - **💻 Beautiful UI Dashboard**: Sleek React interface for managing all aspects of your mock server
 - **🔍 Comprehensive Request Logging**: Monitor and inspect all incoming requests
 - **📝 OpenAPI Support**: Automatically create mock endpoints from your OpenAPI spec
@@ -27,6 +27,66 @@ RustMock is an elegant, high-performance mock server designed for developers who
 - **🧪 Built-in API Testing**: Test your endpoints directly from the dashboard
 - **🔄 Smart Proxy Mode**: Hybrid mock + real API - selectively mock endpoints while proxying others to production
 - **🐳 Docker Ready**: Get started in seconds with pre-built Docker images
+
+## 🎯 CLI - The Easiest Way to Get Started
+
+Install `mokku` globally and start mocking APIs in seconds:
+
+```bash
+# Install mokku CLI
+cargo install --path .
+
+# Start server (opens dashboard automatically)
+mokku
+
+# Start with custom port
+mokku --port 3000
+
+# Start with proxy to production
+mokku --proxy https://api.production.com
+
+# Import OpenAPI and start server
+mokku import swagger.yaml --start --open
+
+# Quick mock creation
+mokku mock POST /users 201 '{"id": 42, "name": "John"}'
+
+# All options
+mokku --help
+```
+
+### Interactive Mode
+
+Run `mokku` without arguments for an interactive CLI menu:
+
+```bash
+$ mokku
+
+🎯 Mokku Interactive Mode
+
+? What would you like to do?
+  ❯ Start server
+    Import OpenAPI spec
+    Create quick mock
+    Exit
+```
+
+### Available Commands
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `mokku` | Start server (default) | `mokku --port 8090 --open` |
+| `mokku server` | Start server explicitly | `mokku server -p 3000` |
+| `mokku import <file>` | Import OpenAPI spec | `mokku import petstore.yaml --start` |
+| `mokku mock <method> <path>` | Create quick mock | `mokku mock GET /health 200 '{"ok":true}'` |
+| `mokku replay <name>` | Replay session (coming soon) | `mokku replay my-session` |
+
+### Global Flags
+
+- `-p, --port <PORT>` - Server port (default: 8090)
+- `--host <HOST>` - Bind address (default: 0.0.0.0)
+- `--proxy <PROXY>` - Default proxy URL for unmatched requests
+- `-o, --open` - Auto-open dashboard in browser
 
 ## 📸 Screenshots
 
