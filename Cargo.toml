@@ -2,6 +2,22 @@
 name = "RustMock"
 version = "0.2.0"
 edition = "2021"
+authors = ["Arthur Kowalsky <arthurkowalsky@users.noreply.github.com>"]
+description = "Lightning-fast, lightweight API mock server with OpenAPI support and beautiful React dashboard"
+license = "MIT"
+repository = "https://github.com/arthurkowalsky/Rust-Mock"
+homepage = "https://github.com/arthurkowalsky/Rust-Mock"
+documentation = "https://github.com/arthurkowalsky/Rust-Mock#readme"
+readme = "README.md"
+keywords = ["mock", "api", "openapi", "testing", "development"]
+categories = ["development-tools", "web-programming", "command-line-utilities"]
+exclude = [
+    "ui/node_modules/**",
+    "ui/dist/**",
+    ".github/**",
+    "images/**",
+    "*.http",
+]
 
 # Binary targets
 [[bin]]

@@ -5,11 +5,12 @@
 </p>
 
 <p align="center">
+  <a href="https://crates.io/crates/RustMock"><img src="https://img.shields.io/crates/v/RustMock" alt="Crates.io"></a>
+  <a href="https://crates.io/crates/RustMock"><img src="https://img.shields.io/crates/d/RustMock" alt="Downloads"></a>
   <a href="https://github.com/arthurkowalsky/Rust-Mock/actions"><img src="https://img.shields.io/github/actions/workflow/status/arthurkowalsky/Rust-Mock/ci.yml" alt="Build Status"></a>
   <a href="https://github.com/arthurkowalsky/Rust-Mock/releases"><img src="https://img.shields.io/github/v/release/arthurkowalsky/Rust-Mock" alt="Version"></a>
   <a href="https://github.com/arthurkowalsky/Rust-Mock/blob/main/LICENSE"><img src="https://img.shields.io/github/license/arthurkowalsky/Rust-Mock" alt="License"></a>
   <a href="https://github.com/arthurkowalsky/Rust-Mock/pkgs/container/rust-mock"><img src="https://img.shields.io/badge/ghcr.io-package-blue" alt="GitHub Package"></a>
-  <a href="https://github.com/arthurkowalsky/Rust-Mock/pkgs/container/rust-mock"><img src="https://img.shields.io/github/repo-size/arthurkowalsky/Rust-Mock" alt="Image Size"></a>
 </p>
 
 > **⚡ Lightning-fast, lightweight API mock server built in Rust with a sleek React dashboard**
@@ -33,7 +34,10 @@ RustMock is an elegant, high-performance mock server designed for developers who
 Install `mokku` globally and start mocking APIs in seconds:
 
 ```bash
-# Install mokku CLI
+# Install from crates.io (recommended)
+cargo install RustMock
+
+# Or install from source
 cargo install --path .
 
 # Start server (opens dashboard automatically)
