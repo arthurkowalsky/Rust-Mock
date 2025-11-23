@@ -1,6 +1,3 @@
-// Mokku - Modern CLI for RustMock server
-// Provides an intuitive interface for mocking APIs with OpenAPI support
-
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use inquire::{Select, Text};
@@ -98,7 +95,6 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    // If no subcommand provided, show interactive menu
     if cli.command.is_none() {
         return run_interactive_mode(cli).await;
     }
@@ -126,7 +122,6 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-// Interactive mode when no command is specified
 async fn run_interactive_mode(cli: Cli) -> anyhow::Result<()> {
     println!("{}", "🎯 Mokku Interactive Mode".bright_cyan().bold());
     println!();
@@ -236,7 +231,6 @@ async fn run_interactive_mode(cli: Cli) -> anyhow::Result<()> {
     Ok(())
 }
 
-// Handle import command
 async fn handle_import(
     file: PathBuf,
     start: bool,
@@ -246,7 +240,6 @@ async fn handle_import(
 ) -> anyhow::Result<()> {
     println!("{} {}", "📥 Importing OpenAPI spec from".bright_blue(), file.display());
 
-    // Load and validate OpenAPI spec
     let spec = load_openapi_from_file(&file)
         .map_err(|e| anyhow::anyhow!("Failed to load OpenAPI spec: {}", e))?;
 
@@ -255,13 +248,11 @@ async fn handle_import(
     if start {
         let config = build_server_config(cli, port);
 
-        // Import the spec by setting OPENAPI_FILE env variable
         std::env::set_var("OPENAPI_FILE", file.to_string_lossy().to_string());
 
         println!("{} Starting server with imported endpoints...", "🚀".bright_cyan());
         start_server_with_browser(config, open).await?;
     } else {
-        // Just validate and show info
         let mut endpoint_count = 0;
         for (_path, item) in &spec.paths.paths {
             if let openapiv3::ReferenceOr::Item(path_item) = item {
@@ -284,7 +275,6 @@ async fn handle_import(
     Ok(())
 }
 
-// Handle mock command
 async fn handle_mock(
     method: Option<String>,
     path: Option<String>,
@@ -292,7 +282,6 @@ async fn handle_mock(
     body: Option<String>,
     server: String,
 ) -> anyhow::Result<()> {
-    // Interactive mode if arguments missing
     let method = if let Some(m) = method {
         m.to_uppercase()
     } else {
@@ -327,11 +316,9 @@ async fn handle_mock(
             .prompt()?
     };
 
-    // Parse response body as JSON
     let response: serde_json::Value = serde_json::from_str(&body)
         .map_err(|e| anyhow::anyhow!("Invalid JSON response body: {}", e))?;
 
-    // Create endpoint config
     let endpoint = EndpointConfig {
         method: method.clone(),
         path: path.clone(),
@@ -341,7 +328,6 @@ async fn handle_mock(
         proxy_url: None,
     };
 
-    // Send to server API
     let client = reqwest::Client::new();
     let url = format!("{}/__mock/endpoints", server.trim_end_matches('/'));
 
@@ -382,7 +368,6 @@ async fn handle_mock(
     Ok(())
 }
 
-// Handle replay command (placeholder)
 fn handle_replay(name: String) -> anyhow::Result<()> {
     println!(
         "{} Replay mode is not yet implemented",
@@ -399,7 +384,6 @@ fn handle_replay(name: String) -> anyhow::Result<()> {
     std::process::exit(1);
 }
 
-// Build server config from CLI args
 fn build_server_config(cli: &Cli, port_override: Option<u16>) -> ServerConfig {
     ServerConfig {
         host: cli.host.clone().unwrap_or_else(|| "0.0.0.0".to_string()),
@@ -408,7 +392,6 @@ fn build_server_config(cli: &Cli, port_override: Option<u16>) -> ServerConfig {
     }
 }
 
-// Start server and optionally open browser
 async fn start_server_with_browser(config: ServerConfig, open_browser: bool) -> anyhow::Result<()> {
     let url = format!("http://localhost:{}", config.port);
 
@@ -426,11 +409,9 @@ async fn start_server_with_browser(config: ServerConfig, open_browser: bool) -> 
     println!("{}", "Press Ctrl+C to stop".bright_black());
     println!();
 
-    // Open browser if requested
     if open_browser {
         let url_clone = url.clone();
         actix_web::rt::spawn(async move {
-            // Wait a bit for server to start
             actix_web::rt::time::sleep(std::time::Duration::from_millis(1500)).await;
             if let Err(e) = open::that(&url_clone) {
                 eprintln!("Failed to open browser: {}", e);
@@ -438,7 +419,6 @@ async fn start_server_with_browser(config: ServerConfig, open_browser: bool) -> 
         });
     }
 
-    // Start server
     start_server(config).await?;
 
     Ok(())

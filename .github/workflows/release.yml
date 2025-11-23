@@ -3,14 +3,13 @@ name: Release
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - '[0-9]+\.[0-9]+\.[0-9]+'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  # Publish to crates.io
   publish-crates:
     name: Publish to crates.io
     runs-on: ubuntu-latest
@@ -29,7 +28,6 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: cargo publish --allow-dirty
 
-  # Build binaries for multiple platforms
   build-binaries:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
@@ -37,7 +35,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             archive: tar.gz
@@ -47,16 +44,12 @@ jobs:
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             archive: tar.gz
-
-          # macOS
           - os: macos-latest
             target: x86_64-apple-darwin
             archive: tar.gz
           - os: macos-latest
             target: aarch64-apple-darwin
             archive: tar.gz
-
-          # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             archive: zip
@@ -75,7 +68,7 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
-      - name: Install cross-compilation tools (Linux)
+      - name: Install cross-compilation tools
         if: matrix.os == 'ubuntu-latest' && matrix.target != 'x86_64-unknown-linux-gnu'
         run: |
           sudo apt-get update
@@ -88,7 +81,7 @@ jobs:
       - name: Build binaries
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Package binaries (Unix)
+      - name: Package binaries
         if: matrix.archive == 'tar.gz'
         run: |
           cd target/${{ matrix.target }}/release
@@ -96,7 +89,7 @@ jobs:
           cd ../../..
           ls -lh *.tar.gz
 
-      - name: Package binaries (Windows)
+      - name: Package binaries
         if: matrix.archive == 'zip'
         run: |
           cd target/${{ matrix.target }}/release
@@ -113,7 +106,6 @@ jobs:
             *.zip
           retention-days: 1
 
-  # Create GitHub Release
   create-release:
     name: Create GitHub Release
     needs: [publish-crates, build-binaries]
@@ -136,14 +128,13 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
+          VERSION=${GITHUB_REF#refs/tags/}
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Extract changelog for this version
+      - name: Extract changelog
         id: changelog
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          # Extract section for this version from CHANGELOG.md
           awk "/## \[${VERSION}\]/,/## \[/" CHANGELOG.md | sed '1d;$d' > release-notes.md
           if [ ! -s release-notes.md ]; then
             echo "Release notes for version ${VERSION}" > release-notes.md
@@ -155,7 +146,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Release v${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
           body_path: release-notes.md
           files: release-assets/*
           draft: false
@@ -167,36 +158,34 @@ jobs:
       - name: Generate installation instructions
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          echo "## 📦 Installation" >> install-instructions.md
-          echo "" >> install-instructions.md
-          echo "### Via crates.io (Recommended)" >> install-instructions.md
-          echo "\`\`\`bash" >> install-instructions.md
-          echo "cargo install RustMock" >> install-instructions.md
-          echo "\`\`\`" >> install-instructions.md
-          echo "" >> install-instructions.md
-          echo "### Via Binary Download" >> install-instructions.md
-          echo "" >> install-instructions.md
-          echo "**Linux (x86_64 GNU):**" >> install-instructions.md
-          echo "\`\`\`bash" >> install-instructions.md
-          echo "curl -L https://github.com/arthurkowalsky/Rust-Mock/releases/download/v${VERSION}/mokku-x86_64-unknown-linux-gnu.tar.gz | tar xz" >> install-instructions.md
-          echo "sudo mv mokku /usr/local/bin/" >> install-instructions.md
-          echo "\`\`\`" >> install-instructions.md
-          echo "" >> install-instructions.md
-          echo "**macOS (Apple Silicon):**" >> install-instructions.md
-          echo "\`\`\`bash" >> install-instructions.md
-          echo "curl -L https://github.com/arthurkowalsky/Rust-Mock/releases/download/v${VERSION}/mokku-aarch64-apple-darwin.tar.gz | tar xz" >> install-instructions.md
-          echo "sudo mv mokku /usr/local/bin/" >> install-instructions.md
-          echo "\`\`\`" >> install-instructions.md
-          echo "" >> install-instructions.md
-          echo "**Windows:**" >> install-instructions.md
-          echo "Download \`mokku-x86_64-pc-windows-msvc.zip\` and extract to your PATH" >> install-instructions.md
-          cat install-instructions.md
+          echo "## Installation" >> install.md
+          echo "" >> install.md
+          echo "### Via crates.io" >> install.md
+          echo "\`\`\`bash" >> install.md
+          echo "cargo install RustMock" >> install.md
+          echo "\`\`\`" >> install.md
+          echo "" >> install.md
+          echo "### Via Binary" >> install.md
+          echo "" >> install.md
+          echo "**Linux:**" >> install.md
+          echo "\`\`\`bash" >> install.md
+          echo "curl -L https://github.com/arthurkowalsky/Rust-Mock/releases/download/${VERSION}/mokku-x86_64-unknown-linux-gnu.tar.gz | tar xz" >> install.md
+          echo "sudo mv mokku /usr/local/bin/" >> install.md
+          echo "\`\`\`" >> install.md
+          echo "" >> install.md
+          echo "**macOS:**" >> install.md
+          echo "\`\`\`bash" >> install.md
+          echo "curl -L https://github.com/arthurkowalsky/Rust-Mock/releases/download/${VERSION}/mokku-aarch64-apple-darwin.tar.gz | tar xz" >> install.md
+          echo "sudo mv mokku /usr/local/bin/" >> install.md
+          echo "\`\`\`" >> install.md
+          echo "" >> install.md
+          echo "**Windows:**" >> install.md
+          echo "Download \`mokku-x86_64-pc-windows-msvc.zip\` and extract to PATH" >> install.md
+          cat install.md
 
-      - name: Comment installation instructions
+      - name: Summary
         run: |
-          echo "✅ Release v${{ steps.version.outputs.version }} created successfully!"
-          echo ""
-          echo "Binaries available for:"
+          echo "Release ${{ steps.version.outputs.version }} created"
+          echo "Binaries:"
           ls -1 release-assets/ | sed 's/^/  - /'
-          echo ""
-          echo "Published to crates.io: https://crates.io/crates/RustMock"
+          echo "Published to crates.io"

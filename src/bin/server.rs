@@ -1,6 +1,3 @@
-// Legacy RustMock binary (backward compatible)
-// This maintains the old CLI interface for existing users
-
 use clap::Parser;
 use RustMock::{init_logger, start_server, ServerConfig};
 

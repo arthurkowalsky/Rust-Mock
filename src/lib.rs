@@ -12,19 +12,16 @@ use std::{collections::HashMap, env, fs, sync::Mutex};
 
 #[derive(Serialize, Clone)]
 pub struct RequestLog {
-    // Request data
     pub method: String,
     pub path: String,
     pub request_headers: HashMap<String, String>,
     pub query: String,
     pub request_body: Option<Value>,
 
-    // Response data
     pub status: u16,
     pub response_body: Option<Value>,
     pub response_headers: HashMap<String, String>,
 
-    // Metadata
     pub timestamp: String,
     pub matched_endpoint: Option<String>,
     pub proxied_to: Option<String>,
@@ -44,7 +41,6 @@ pub struct AppState {
     pub default_proxy_url: Mutex<Option<String>>,
 }
 
-// Server configuration (used by both CLI and old binary)
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
     pub host: String,
@@ -104,8 +100,6 @@ fn extract_example_response_for_status(op: &Operation, status: u16) -> Option<Va
 }
 
 fn matches_path_template(template: &str, actual_path: &str) -> bool {
-    // Convert OpenAPI path template to regex pattern
-    // e.g., "/update-plan/{request_hash}" -> "/update-plan/(?P<request_hash>[^/]+)"
     let regex_pattern = template.replace('{', "(?P<").replace('}', ">[^/]+)");
     match Regex::new(&format!("^{}$", regex_pattern)) {
         Ok(re) => re.is_match(actual_path),
@@ -234,12 +228,10 @@ pub struct ImportRequest {
     pub openapi_spec: Value,
 }
 
-// Helper function to load OpenAPI spec from file (YAML or JSON)
 pub fn load_openapi_from_file(path: &std::path::Path) -> Result<OpenAPI, String> {
     let content = fs::read_to_string(path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
-    // Try YAML first (supports both YAML and JSON)
     let raw_value: Value = if path.extension().and_then(|s| s.to_str()) == Some("yaml")
         || path.extension().and_then(|s| s.to_str()) == Some("yml") {
         serde_yaml::from_str(&content)
@@ -260,10 +252,8 @@ pub fn import_openapi_spec(
     let mut imported_count = 0;
     let mut endpoints = Vec::new();
 
-    // Iterate through all paths and operations
     for (path, item) in &spec.paths.paths {
         if let ReferenceOr::Item(path_item) = item {
-            // Process each HTTP method
             let methods = [
                 ("GET", &path_item.get),
                 ("POST", &path_item.post),
@@ -274,7 +264,6 @@ pub fn import_openapi_spec(
 
             for (method, op_opt) in methods {
                 if let Some(op) = op_opt {
-                    // Extract status code (default to 200)
                     let status = if op.responses.responses.contains_key(&StatusCode::Code(201)) {
                         201
                     } else if op.responses.responses.contains_key(&StatusCode::Code(204)) {
@@ -285,7 +274,6 @@ pub fn import_openapi_spec(
                         200
                     };
 
-                    // Extract response example for the detected status code
                     let response = extract_example_response_for_status(op, status)
                         .unwrap_or_else(|| json!({"message": "OK"}));
 
@@ -315,7 +303,6 @@ pub fn import_openapi_spec(
 }
 
 pub async fn import_openapi(data: web::Data<AppState>, req: web::Json<ImportRequest>) -> impl Responder {
-    // Validate and parse OpenAPI spec
     let spec = match serde_json::from_value::<OpenAPI>(req.openapi_spec.clone()) {
         Ok(s) => s,
         Err(e) => {
@@ -338,10 +325,8 @@ pub async fn import_openapi(data: web::Data<AppState>, req: web::Json<ImportRequ
 pub async fn export_openapi(data: web::Data<AppState>) -> impl Responder {
     let mut paths_map = serde_json::Map::new();
 
-    // Export dynamic endpoints
     let dyn_map = data.dynamic.lock().unwrap();
     for ((method, path), endpoint) in dyn_map.iter() {
-        // Get or create path item
         if !paths_map.contains_key(path) {
             paths_map.insert(path.clone(), json!({}));
         }
@@ -349,12 +334,10 @@ pub async fn export_openapi(data: web::Data<AppState>) -> impl Responder {
         let path_obj = paths_map.get_mut(path).unwrap();
         let path_item = path_obj.as_object_mut().unwrap();
 
-        // Build operation object
         let mut operation = serde_json::Map::new();
         operation.insert("summary".to_string(), json!(format!("{} {}", method, path)));
         operation.insert("operationId".to_string(), json!(format!("{}_{}", method.to_lowercase(), path.replace('/', "_").trim_matches('_'))));
 
-        // Add request body if method supports it
         if matches!(method.as_str(), "POST" | "PUT" | "PATCH") {
             operation.insert("requestBody".to_string(), json!({
                 "content": {
@@ -367,7 +350,6 @@ pub async fn export_openapi(data: web::Data<AppState>) -> impl Responder {
             }));
         }
 
-        // Add response
         let mut responses = serde_json::Map::new();
         responses.insert(endpoint.status.to_string(), json!({
             "description": format!("Successful response with status {}", endpoint.status),
@@ -383,11 +365,9 @@ pub async fn export_openapi(data: web::Data<AppState>) -> impl Responder {
 
         operation.insert("responses".to_string(), json!(responses));
 
-        // Add operation to path item
         path_item.insert(method.to_lowercase(), json!(operation));
     }
 
-    // Build OpenAPI specification
     let openapi_spec = json!({
         "openapi": "3.0.0",
         "info": {
@@ -415,7 +395,6 @@ async fn forward_to_proxy(
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    // Build full URL
     let full_url = if query.is_empty() {
         format!("{}{}", proxy_url.trim_end_matches('/'), req.path())
     } else {
@@ -424,7 +403,6 @@ async fn forward_to_proxy(
 
     info!("Proxying {} {} to {}", req.method(), req.path(), full_url);
 
-    // Copy headers (exclude Host and other hop-by-hop headers)
     let mut headers = reqwest::header::HeaderMap::new();
     for (key, value) in req.headers() {
         let key_str = key.as_str().to_lowercase();
@@ -440,7 +418,6 @@ async fn forward_to_proxy(
         }
     }
 
-    // Forward request
     let method = match req.method().as_str() {
         "GET" => reqwest::Method::GET,
         "POST" => reqwest::Method::POST,
@@ -462,7 +439,6 @@ async fn forward_to_proxy(
 
     let status = response.status().as_u16();
 
-    // Extract response headers
     let mut response_headers = HashMap::new();
     for (key, value) in response.headers() {
         if let Ok(val_str) = value.to_str() {
@@ -470,16 +446,12 @@ async fn forward_to_proxy(
         }
     }
 
-    // Handle response body - some status codes don't have content
     let response_body = if status == 204 || status == 304 {
-        // 204 No Content and 304 Not Modified don't have response bodies
         None
     } else {
-        // Try to get response bytes first
         match response.bytes().await {
             Ok(bytes) if bytes.is_empty() => None,
             Ok(bytes) => {
-                // Try to parse as JSON
                 serde_json::from_slice::<Value>(&bytes).ok()
             }
             Err(_) => None,
@@ -498,7 +470,6 @@ pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppSta
     let request_body = serde_json::from_slice::<Value>(&body).ok();
     info!("Request {} {} headers={:?} query={} body={:?}", method, path, request_headers, query, request_body);
 
-    // Try exact match first in dynamic endpoints
     let mut matched_endpoint: Option<DynamicEndpoint> = None;
     let mut matched_pattern: Option<String> = None;
     {
@@ -507,7 +478,6 @@ pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppSta
             matched_endpoint = Some(ep.clone());
             matched_pattern = Some(path.clone());
         } else {
-            // Try path template matching for dynamic endpoints with parameters
             for ((m, p), ep) in dyn_map.iter() {
                 if m == &method && matches_path_template(p, &path) {
                     matched_endpoint = Some(ep.clone());
@@ -519,16 +489,13 @@ pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppSta
         }
     }
 
-    // Capture response data for logging
     let mut response_body: Option<Value> = None;
     let mut response_headers = HashMap::new();
     let mut proxied_to: Option<String> = None;
     let status: u16;
 
     let response = if let Some(ep) = matched_endpoint {
-        // Check if endpoint has proxy_url configured
         if let Some(proxy_url) = &ep.proxy_url {
-            // PROXY MODE: Forward to upstream
             match forward_to_proxy(proxy_url, &req, &body, &query).await {
                 Ok((proxy_status, proxy_body, proxy_headers)) => {
                     status = proxy_status;
@@ -557,11 +524,9 @@ pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppSta
                 }
             }
         } else {
-            // MOCK MODE: Return mock response
             status = ep.status;
             response_body = Some(ep.response.clone());
 
-            // Add custom headers if present
             if let Some(custom_headers) = &ep.headers {
                 response_headers.extend(custom_headers.clone());
             }
@@ -570,7 +535,6 @@ pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppSta
             HttpResponse::build(actix_web::http::StatusCode::from_u16(ep.status).unwrap()).json(&ep.response)
         }
     } else if let Some(default_proxy) = data.default_proxy_url.lock().unwrap().clone() {
-        // DEFAULT PROXY MODE: Forward to default proxy URL
         match forward_to_proxy(&default_proxy, &req, &body, &query).await {
             Ok((proxy_status, proxy_body, proxy_headers)) => {
                 status = proxy_status;
@@ -599,14 +563,12 @@ pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppSta
             }
         }
     } else {
-        // NO MATCH: 404
         status = 404;
         HttpResponse::NotFound().finish()
     };
 
     info!("Responded {} {} -> {}", method, path, status);
 
-    // Log with full request and response data
     data.logs.lock().unwrap().push(RequestLog {
         method,
         path,
@@ -624,16 +586,13 @@ pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppSta
     response
 }
 
-// Initialize logger (call once at startup)
 pub fn init_logger() {
     Builder::new().filter(None, LevelFilter::Info).init();
 }
 
-// Public function to start the server (used by both binaries and CLI)
 pub async fn start_server(cfg: ServerConfig) -> std::io::Result<()> {
     let mut cfg = cfg;
 
-    // Check env variable for default proxy URL if not set via CLI
     if cfg.default_proxy_url.is_none() {
         cfg.default_proxy_url = env::var("DEFAULT_PROXY_URL").ok();
     }
