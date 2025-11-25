@@ -5,7 +5,6 @@ use env_logger::Builder;
 use log::{info, warn, LevelFilter};
 use openapiv3::{OpenAPI, Operation, ReferenceOr, StatusCode};
 use regex::Regex;
-use reqwest;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{collections::HashMap, env, fs, sync::Mutex};
@@ -87,16 +86,12 @@ pub struct UpdateConfig {
 }
 
 fn extract_example_response_for_status(op: &Operation, status: u16) -> Option<Value> {
-    if let Some(item) = op.responses.responses.get(&StatusCode::Code(status)) {
-        if let ReferenceOr::Item(resp) = item {
-            if let Some(media) = resp.content.get("application/json") {
-                if let Some(example) = &media.example {
-                    return Some(example.clone());
-                }
-            }
-        }
-    }
-    None
+    op.responses.responses.get(&StatusCode::Code(status))
+        .and_then(|item| match item {
+            ReferenceOr::Item(resp) => resp.content.get("application/json"),
+            _ => None,
+        })
+        .and_then(|media| media.example.clone())
 }
 
 fn matches_path_template(template: &str, actual_path: &str) -> bool {
@@ -534,37 +529,40 @@ pub async fn dispatch(req: HttpRequest, body: web::Bytes, data: web::Data<AppSta
 
             HttpResponse::build(actix_web::http::StatusCode::from_u16(ep.status).unwrap()).json(&ep.response)
         }
-    } else if let Some(default_proxy) = data.default_proxy_url.lock().unwrap().clone() {
-        match forward_to_proxy(&default_proxy, &req, &body, &query).await {
-            Ok((proxy_status, proxy_body, proxy_headers)) => {
-                status = proxy_status;
-                response_body = proxy_body.clone();
-                response_headers = proxy_headers.clone();
-                proxied_to = Some(format!("{}{}", default_proxy, path));
-                matched_pattern = Some(format!("default proxy to {}", default_proxy));
-
-                let mut builder = HttpResponse::build(
-                    actix_web::http::StatusCode::from_u16(proxy_status).unwrap()
-                );
-                for (k, v) in proxy_headers {
-                    builder.insert_header((k.as_str(), v.as_str()));
-                }
-                if let Some(json_body) = proxy_body {
-                    builder.json(json_body)
-                } else {
-                    builder.finish()
-                }
-            }
-            Err(e) => {
-                warn!("Default proxy request failed: {}", e);
-                status = 502;
-                response_body = Some(json!({"error": "Default proxy request failed", "details": e}));
-                HttpResponse::BadGateway().json(json!({"error": "Default proxy request failed", "details": e}))
-            }
-        }
     } else {
-        status = 404;
-        HttpResponse::NotFound().finish()
+        let default_proxy = data.default_proxy_url.lock().unwrap().clone();
+        if let Some(default_proxy) = default_proxy {
+            match forward_to_proxy(&default_proxy, &req, &body, &query).await {
+                Ok((proxy_status, proxy_body, proxy_headers)) => {
+                    status = proxy_status;
+                    response_body = proxy_body.clone();
+                    response_headers = proxy_headers.clone();
+                    proxied_to = Some(format!("{}{}", default_proxy, path));
+                    matched_pattern = Some(format!("default proxy to {}", default_proxy));
+
+                    let mut builder = HttpResponse::build(
+                        actix_web::http::StatusCode::from_u16(proxy_status).unwrap()
+                    );
+                    for (k, v) in proxy_headers {
+                        builder.insert_header((k.as_str(), v.as_str()));
+                    }
+                    if let Some(json_body) = proxy_body {
+                        builder.json(json_body)
+                    } else {
+                        builder.finish()
+                    }
+                }
+                Err(e) => {
+                    warn!("Default proxy request failed: {}", e);
+                    status = 502;
+                    response_body = Some(json!({"error": "Default proxy request failed", "details": e}));
+                    HttpResponse::BadGateway().json(json!({"error": "Default proxy request failed", "details": e}))
+                }
+            }
+        } else {
+            status = 404;
+            HttpResponse::NotFound().finish()
+        }
     };
 
     info!("Responded {} {} -> {}", method, path, status);
@@ -601,7 +599,7 @@ pub async fn start_server(cfg: ServerConfig) -> std::io::Result<()> {
 
     let mut dynamic_endpoints = HashMap::new();
 
-    if let Some(openapi_path) = env::var("OPENAPI_FILE").ok() {
+    if let Ok(openapi_path) = env::var("OPENAPI_FILE") {
         match fs::read_to_string(&openapi_path) {
             Ok(content) => {
                 match serde_json::from_str::<Value>(&content) {
