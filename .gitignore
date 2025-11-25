@@ -4,6 +4,7 @@
 .gradle
 out/
 bin/
+!src/bin/
 build/
 gen/
 deps/
