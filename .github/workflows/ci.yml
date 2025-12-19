@@ -37,7 +37,7 @@ jobs:
       - name: Build UI
         working-directory: ui
         run: |
-          npm install
+          npm ci
           npm run build
 
       - name: Run npm audit for security vulnerabilities
@@ -54,7 +54,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-deny
-        run: cargo install cargo-deny --locked
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
 
       - name: Run cargo-deny for security checks
         run: cargo deny check advisories
