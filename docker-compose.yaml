@@ -1,6 +1,7 @@
 services:
-  Rust-Mock:
-    image: ghcr.io/arthurkowalsky/rust-mock:latest
+  rustmock:
+    build:
+      context: .
     ports:
       - "8090:8090"
     #volumes:
