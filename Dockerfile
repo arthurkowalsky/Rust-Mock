@@ -6,7 +6,6 @@ COPY ui/ ./
 RUN npm run build
 
 FROM rust:1.91-slim AS rust-builder
-RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY Cargo.* ./
 COPY src/ ./src/
