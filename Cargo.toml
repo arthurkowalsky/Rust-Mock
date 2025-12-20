@@ -1,6 +1,6 @@
 [package]
 name = "RustMock"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 authors = ["Arthur Kowalsky <arthurkowalsky@users.noreply.github.com>"]
 description = "Lightning-fast, lightweight API mock server with OpenAPI support and beautiful React dashboard"
