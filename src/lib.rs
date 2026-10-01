@@ -229,7 +229,7 @@ pub fn load_openapi_from_file(path: &std::path::Path) -> Result<OpenAPI, String>
 
     let raw_value: Value = if path.extension().and_then(|s| s.to_str()) == Some("yaml")
         || path.extension().and_then(|s| s.to_str()) == Some("yml") {
-        serde_yaml::from_str(&content)
+        serde_norway::from_str(&content)
             .map_err(|e| format!("Failed to parse YAML: {}", e))?
     } else {
         serde_json::from_str(&content)

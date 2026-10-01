@@ -1,6 +1,7 @@
 
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
+import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
 export default defineConfig(({ mode }) => ({
@@ -14,11 +15,12 @@ export default defineConfig(({ mode }) => ({
     sourcemap: true
   },
   plugins: [
-    react()
+    react(),
+    tailwindcss()
   ].filter(Boolean),
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
 }));
