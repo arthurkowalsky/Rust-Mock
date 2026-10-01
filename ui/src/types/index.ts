@@ -29,6 +29,7 @@ export interface RequestLog {
 export interface EndpointResponse {
   added?: boolean;
   removed?: boolean;
+  updated?: boolean;
   error?: string;
 }
 

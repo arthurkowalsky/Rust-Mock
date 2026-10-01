@@ -76,7 +76,7 @@ const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
             variant="ghost"
             size="icon"
             onClick={() => handleRemovePair(index)}
-            className="flex-shrink-0"
+            className="shrink-0"
           >
             <X className="h-4 w-4" />
           </Button>

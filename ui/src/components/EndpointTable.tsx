@@ -277,7 +277,7 @@ const EndpointTable: React.FC<EndpointTableProps> = ({
               className="space-y-4"
             >
               <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
+                <div className="flex flex-col gap-2">
                   <Label>HTTP Method</Label>
                   <Select
                     value={editForm.method}

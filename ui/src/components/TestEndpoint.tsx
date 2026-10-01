@@ -161,7 +161,7 @@ const TestEndpoint: React.FC<TestEndpointProps> = ({ initialEndpoint }) => {
   return (
     <div className="space-y-6">
       {/* Test Form */}
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-white rounded-lg shadow-sm p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="flex flex-col md:flex-row gap-4">
             {/* Method Selector */}
@@ -311,7 +311,7 @@ const TestEndpoint: React.FC<TestEndpointProps> = ({ initialEndpoint }) => {
 
       {/* Response Section */}
       {response && (
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-medium">Response</h2>
             <div className="flex items-center space-x-2">
